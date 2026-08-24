@@ -175,7 +175,7 @@ export default function Home() {
           className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
           title={isDarkMode ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
         >
-          <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-xl`}></i>
+          <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
         </button>
       </div>
     );
@@ -238,7 +238,7 @@ export default function Home() {
           className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
           title={isDarkMode ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
         >
-          <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-xl`}></i>
+          <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
         </button>
       </div>
     );
@@ -552,7 +552,7 @@ export default function Home() {
         className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
         title={isDarkMode ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
       >
-        <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-xl`}></i>
+        <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
       </button>
     </div>
   );
