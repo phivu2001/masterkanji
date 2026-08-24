@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import { kanjiData } from '@/data/kanji';
-import Head from 'next/head';
 
 export default function Home() {
   const [selectedLevel, setSelectedLevel] = useState<'N5' | 'N4' | null>(null);
@@ -147,14 +146,14 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-slate-100 dark:bg-slate-700 flex flex-col items-center justify-center p-4 font-sans">
         <div className="max-w-2xl w-full bg-white dark:bg-slate-800 rounded-3xl shadow-xl overflow-hidden p-10 text-center border border-slate-200 dark:border-slate-700">
-          <div className="bg-red-500 text-white font-bold rounded-2xl w-24 h-24 flex items-center justify-center font-[Noto_Sans_JP] text-5xl mx-auto mb-6 shadow-lg shadow-red-200">漢</div>
+          <div className="bg-red-50 dark:bg-red-900/300 text-white font-bold rounded-2xl w-24 h-24 flex items-center justify-center font-[Noto_Sans_JP] text-5xl mx-auto mb-6 shadow-lg shadow-red-200">漢</div>
           <h1 className="text-4xl font-black text-slate-800 dark:text-slate-100 mb-4">KanjiMaster</h1>
           <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-lg mb-10">Chọn cấp độ để bắt đầu học ngay hôm nay</p>
           
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Card N5 */}
             <button onClick={() => { setSelectedLevel('N5'); setSelectedLesson(null); }} className="group text-left border-2 border-slate-200 dark:border-slate-700 hover:border-red-500 rounded-2xl p-6 transition-all hover:shadow-lg bg-white dark:bg-slate-800 relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 rounded-bl-full -z-0 transition-transform duration-500 group-hover:scale-150"></div>
+               <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 dark:bg-red-900/30 rounded-bl-full -z-0 transition-transform duration-500 group-hover:scale-150"></div>
                <h2 className="text-4xl font-black text-red-500 mb-2 relative z-10">N5</h2>
                <p className="font-bold text-slate-800 dark:text-slate-100 text-lg relative z-10">Kanji Nhập môn</p>
                <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm mt-2 relative z-10 leading-relaxed">21 chữ Kanji nền tảng. Dành cho người mới bắt đầu học tiếng Nhật.</p>
@@ -162,7 +161,7 @@ export default function Home() {
             
             {/* Card N4 */}
             <button onClick={() => { setSelectedLevel('N4'); setSelectedLesson(null); }} className="group text-left border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 rounded-2xl p-6 transition-all hover:shadow-lg bg-white dark:bg-slate-800 relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-bl-full -z-0 transition-transform duration-500 group-hover:scale-150"></div>
+               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 dark:bg-blue-900/30 rounded-bl-full -z-0 transition-transform duration-500 group-hover:scale-150"></div>
                <h2 className="text-4xl font-black text-blue-500 mb-2 relative z-10">N4</h2>
                <p className="font-bold text-slate-800 dark:text-slate-100 text-lg relative z-10">Kanji Sơ trung cấp</p>
                <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm mt-2 relative z-10 leading-relaxed">Mở rộng vốn từ vựng. (Chứa 1 chữ Kanji mẫu 'Nghiên').</p>
@@ -212,7 +211,7 @@ export default function Home() {
                   onClick={() => { setSelectedLesson(i); setCurrentIndex(0); setMode('learn'); setIsFlipped(false); }}
                   className={`bg-white dark:bg-slate-800 border ${isCompleted ? 'border-green-400' : 'border-slate-200 dark:border-slate-700'} hover:border-red-400 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between h-40 group relative overflow-hidden`}
                 >
-                  {isCompleted && <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 rounded-bl-full -z-0"></div>}
+                  {isCompleted && <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 dark:bg-green-900/30 rounded-bl-full -z-0"></div>}
                   <div className="flex justify-between items-start w-full relative z-10">
                     <span className="font-bold text-slate-700 dark:text-slate-200 text-lg flex items-center gap-2">
                       Bài {i + 1}
@@ -248,11 +247,6 @@ export default function Home() {
 
   return (
     <div className="bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-sans min-h-screen">
-      <Head>
-        <title>Học Kanji - Giao diện mẫu</title>
-        <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet" />
-      </Head>
 
       {/* Navbar */}
       <nav className="bg-white dark:bg-slate-800 shadow-sm border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50">
@@ -260,7 +254,7 @@ export default function Home() {
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <div onClick={() => { setSelectedLevel(null); setSelectedLesson(null); }} className="flex-shrink-0 flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" title="Quay lại Trang Chủ">
-                <div className="bg-red-500 text-white font-bold rounded-lg w-8 h-8 flex items-center justify-center font-[Noto_Sans_JP] text-lg">漢</div>
+                <div className="bg-red-50 dark:bg-red-900/300 text-white font-bold rounded-lg w-8 h-8 flex items-center justify-center font-[Noto_Sans_JP] text-lg">漢</div>
                 <span className="font-bold text-xl text-slate-800 dark:text-slate-100">KanjiMaster</span>
               </div>
               <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
@@ -305,7 +299,7 @@ export default function Home() {
                 <button onClick={previousKanji} className="flex-1 sm:flex-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 dark:bg-slate-900 font-medium transition-colors">
                   <i className="fas fa-arrow-left mr-2"></i>Trở lại
                 </button>
-                <button onClick={nextKanji} className="flex-1 sm:flex-none bg-red-500 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-red-600 font-medium transition-colors">
+                <button onClick={nextKanji} className="flex-1 sm:flex-none bg-red-50 dark:bg-red-900/300 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-red-600 font-medium transition-colors">
                   Tiếp theo <i className="fas fa-arrow-right ml-2"></i>
                 </button>
               </>
@@ -324,7 +318,7 @@ export default function Home() {
                     setMode('learn');
                     setIsFlipped(false);
                   }}
-                  className={`relative flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-105 ${idx === currentIndex ? 'border-red-500 bg-red-50' : 'border-slate-100 dark:border-slate-800 hover:border-red-300 bg-slate-50 dark:bg-slate-900'}`}
+                  className={`relative flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-105 ${idx === currentIndex ? 'border-red-500 bg-red-50 dark:bg-red-900/30' : 'border-slate-100 dark:border-slate-800 hover:border-red-300 bg-slate-50 dark:bg-slate-900'}`}
                 >
                   {userProgress[k.id]?.status === 'learned' && <div className="absolute top-2 right-2 text-green-500" title="Đã thuộc"><i className="fas fa-check-circle"></i></div>}
                   {userProgress[k.id]?.status === 'hard' && <div className="absolute top-2 right-2 text-red-500" title="Hay sai"><i className="fas fa-exclamation-circle"></i></div>}
@@ -365,7 +359,7 @@ export default function Home() {
                       <div>
                         <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Âm On (Onyomi)</h3>
                         <div className="flex flex-wrap gap-2">
-                          <span className="bg-blue-50 text-blue-700 px-3 py-1 rounded-md text-sm font-medium border border-blue-100">{data.onyomi}</span>
+                          <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 px-3 py-1 rounded-md text-sm font-medium border border-blue-100">{data.onyomi}</span>
                         </div>
                       </div>
                       <div>
@@ -433,7 +427,7 @@ export default function Home() {
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{currentIndex + 1} / {total}</span>
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5 mb-4">
-                  <div className="bg-red-500 h-2.5 rounded-full transition-all duration-300" style={{ width: `${((currentIndex + 1) / total) * 100}%` }}></div>
+                  <div className="bg-red-50 dark:bg-red-900/300 h-2.5 rounded-full transition-all duration-300" style={{ width: `${((currentIndex + 1) / total) * 100}%` }}></div>
                 </div>
                 <div className="flex items-center justify-between mb-2 mt-4">
                   <span className="text-sm text-slate-600 dark:text-slate-300">Cần ôn tập</span>
@@ -477,9 +471,9 @@ export default function Home() {
                 </div>
                 
                 <div className="flex justify-between mt-4 gap-2">
-                  <button onClick={() => handleFlashcardResponse('lai')} className="flex-1 py-2 bg-red-50 text-red-600 rounded-lg font-medium hover:bg-red-100 transition-colors">Lại (1p)</button>
-                  <button onClick={() => handleFlashcardResponse('kho')} className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-lg font-medium hover:bg-blue-100 transition-colors">Khó (10p)</button>
-                  <button onClick={() => handleFlashcardResponse('tot')} className="flex-1 py-2 bg-green-50 text-green-600 rounded-lg font-medium hover:bg-green-100 transition-colors">Tốt (1n)</button>
+                  <button onClick={() => handleFlashcardResponse('lai')} className="flex-1 py-2 bg-red-50 dark:bg-red-900/30 text-red-600 rounded-lg font-medium hover:bg-red-100 transition-colors">Lại (1p)</button>
+                  <button onClick={() => handleFlashcardResponse('kho')} className="flex-1 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-lg font-medium hover:bg-blue-100 transition-colors">Khó (10p)</button>
+                  <button onClick={() => handleFlashcardResponse('tot')} className="flex-1 py-2 bg-green-50 dark:bg-green-900/30 text-green-600 rounded-lg font-medium hover:bg-green-100 transition-colors">Tốt (1n)</button>
                 </div>
               </div>
             </div>
