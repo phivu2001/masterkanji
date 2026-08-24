@@ -206,7 +206,9 @@ export default function Home() {
                <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 dark:bg-red-900/30 rounded-bl-full -z-0 transition-transform duration-500 group-hover:scale-150"></div>
                <h2 className="text-4xl font-black text-red-500 mb-2 relative z-10">N5</h2>
                <p className="font-bold text-slate-800 dark:text-slate-100 text-lg relative z-10">Kanji Nhập môn</p>
-               <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm mt-2 relative z-10 leading-relaxed">21 chữ Kanji nền tảng. Dành cho người mới bắt đầu học tiếng Nhật.</p>
+               <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm mt-2 relative z-10 leading-relaxed">
+                 {kanjiData.filter(k => k.level === 'N5').length} chữ Kanji nền tảng. Dành cho người mới bắt đầu học tiếng Nhật.
+               </p>
             </button>
             
             {/* Card N4 */}
@@ -214,7 +216,9 @@ export default function Home() {
                <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 dark:bg-blue-900/30 rounded-bl-full -z-0 transition-transform duration-500 group-hover:scale-150"></div>
                <h2 className="text-4xl font-black text-blue-500 mb-2 relative z-10">N4</h2>
                <p className="font-bold text-slate-800 dark:text-slate-100 text-lg relative z-10">Kanji Sơ trung cấp</p>
-               <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm mt-2 relative z-10 leading-relaxed">Mở rộng vốn từ vựng. (Chứa 1 chữ Kanji mẫu 'Nghiên').</p>
+               <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm mt-2 relative z-10 leading-relaxed">
+                 {kanjiData.filter(k => k.level === 'N4').length} chữ Kanji trung cấp. Giúp bạn tự tin đọc hiểu các đoạn văn dài.
+               </p>
             </button>
           </div>
         </div>
