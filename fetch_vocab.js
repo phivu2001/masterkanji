@@ -32,7 +32,7 @@ async function fetchExtraVocab() {
         const res = await fetch('https://mazii.net/api/search', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dict: 'javi', type: 'word', query: k, limit: 15, page: 1 })
+          body: JSON.stringify({ dict: 'javi', type: 'word', query: k, limit: 50, page: 1 })
         });
         const data = await res.json();
         
