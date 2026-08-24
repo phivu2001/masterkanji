@@ -206,10 +206,10 @@ export default function Home() {
     
     if (isCorrect) {
       setQuizScore(prev => prev + 1);
-      // Auto next after 1 second
+      // Auto next after 2 seconds to give time to read ON/KUN
       setTimeout(() => {
         nextQuizQuestion();
-      }, 1000);
+      }, 2000);
     } else {
       setQuizWrongAnswers(prev => {
         // Chỉ thêm nếu chưa có (trường hợp click nhanh nhiều lần)
@@ -509,6 +509,25 @@ export default function Home() {
           <div className="bg-white dark:bg-slate-800 w-full rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 sm:p-12 mb-8 flex flex-col items-center">
             <h3 className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mb-4">Chữ này có nghĩa là gì?</h3>
             <div className="text-[120px] leading-none font-[Noto_Sans_JP] font-black text-slate-800 dark:text-slate-100">{currentQ.kanjiData.kanji}</div>
+            
+            <div 
+              className={`flex flex-col items-center gap-3 overflow-hidden transition-all duration-500 ease-in-out w-full ${quizStatus === 'answered' ? 'max-h-40 opacity-100 mt-8' : 'max-h-0 opacity-0 mt-0'}`}
+            >
+              <div className="flex flex-wrap gap-4 w-full justify-center">
+                {currentQ.kanjiData.onyomi && currentQ.kanjiData.onyomi !== '-' && (
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">ON</span>
+                    <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-3 py-1.5 rounded-lg text-sm font-bold border border-blue-100 dark:border-blue-800/50 shadow-sm">{currentQ.kanjiData.onyomi}</span>
+                  </div>
+                )}
+                {currentQ.kanjiData.kunyomi && currentQ.kanjiData.kunyomi !== '-' && (
+                  <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">KUN</span>
+                    <span className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 rounded-lg text-sm font-bold border border-emerald-100 dark:border-emerald-800/50 shadow-sm">{currentQ.kanjiData.kunyomi}</span>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
