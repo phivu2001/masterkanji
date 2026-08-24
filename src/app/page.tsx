@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { kanjiData } from '@/data/kanji';
+import HanziWriter from 'hanzi-writer';
 
 export default function Home() {
   const [selectedLevel, setSelectedLevel] = useState<'N5' | 'N4' | null>(null);
@@ -38,6 +39,45 @@ export default function Home() {
     }
   }, [isDarkMode]);
 
+  const writerRef = useRef<HTMLDivElement>(null);
+  const writerInstance = useRef<any>(null);
+
+  const initHanziWriter = (kanji: string) => {
+    if (writerRef.current) {
+      writerRef.current.innerHTML = ''; // Xoá SVG cũ
+      writerInstance.current = HanziWriter.create(writerRef.current, kanji, {
+        width: 120,
+        height: 120,
+        padding: 5,
+        showOutline: true,
+        strokeAnimationSpeed: 1,
+        delayBetweenStrokes: 50,
+        strokeColor: isDarkMode ? '#FFFFFF' : '#1E293B', // Slate 800
+        outlineColor: isDarkMode ? '#334155' : '#E2E8F0', // Slate 700 / Slate 200
+        charDataLoader: (char, onComplete) => {
+          fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data-jp@2.0.1/${char}.json`)
+            .then(res => res.json())
+            .then(onComplete)
+            .catch(() => {
+              // Fallback to chinese data
+              fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${char}.json`)
+                .then(res => res.json())
+                .then(onComplete)
+                .catch(console.error);
+            });
+        }
+      });
+    }
+  };
+
+  const animateStrokes = () => {
+    writerInstance.current?.animateCharacter();
+  };
+
+  const quizStrokes = () => {
+    writerInstance.current?.quiz();
+  };
+
   const toggleDarkMode = () => {
     setIsDarkMode(!isDarkMode);
     if (!isDarkMode) {
@@ -67,7 +107,13 @@ export default function Home() {
     : [];
   const total = lessonData.length;
   const data = lessonData[currentIndex] || lessonData[0]; // Tránh lỗi khi mảng rỗng tạm thời
-
+  
+  useEffect(() => {
+    if (data?.kanji && mode === 'learn' && selectedLesson !== null) {
+      // Đợi DOM render div canvas
+      setTimeout(() => initHanziWriter(data.kanji), 100);
+    }
+  }, [data?.kanji, isDarkMode, mode, selectedLesson, currentIndex]);
   const nextKanji = () => {
     if (currentIndex < total - 1) {
       setCurrentIndex(currentIndex + 1);
@@ -345,14 +391,25 @@ export default function Home() {
                     
                     <div className="mt-8 flex flex-col items-center">
                       <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">Thứ tự nét chữ</h3>
-                      <div className="w-24 h-24 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center p-2 opacity-80 hover:opacity-100 transition-opacity">
-                        <img 
-                          src={`https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/0${data.kanji.charCodeAt(0).toString(16).padStart(4, '0').toLowerCase()}.svg`} 
-                          alt={`Thứ tự nét ${data.kanji}`}
-                          className="w-full h-full object-contain filter dark:invert"
-                          title={`Hướng dẫn viết chữ ${data.kanji}`}
-                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-                        />
+                      <div 
+                        ref={writerRef}
+                        className="w-32 h-32 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center p-2 mb-3"
+                      >
+                        {/* HanziWriter Canvas will render here */}
+                      </div>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={animateStrokes} 
+                          className="bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-800/50 dark:text-blue-400 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
+                        >
+                          <i className="fas fa-play"></i> Vẽ mẫu
+                        </button>
+                        <button 
+                          onClick={quizStrokes} 
+                          className="bg-green-50 hover:bg-green-100 text-green-600 dark:bg-green-900/30 dark:hover:bg-green-800/50 dark:text-green-400 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
+                        >
+                          <i className="fas fa-pencil-alt"></i> Tập viết
+                        </button>
                       </div>
                     </div>
                   </div>
