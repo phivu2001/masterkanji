@@ -91,13 +91,23 @@ export default function Home() {
 
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
+      // Sửa lỗi kẹt âm thanh trên iOS/Safari
       window.speechSynthesis.cancel();
+      
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = 'ja-JP';
       utterance.rate = 0.8;
+      
+      // Cố gắng ép chọn giọng tiếng Nhật nếu máy có sẵn
+      const voices = window.speechSynthesis.getVoices();
+      const jaVoice = voices.find(voice => voice.lang === 'ja-JP' || voice.lang.includes('ja'));
+      if (jaVoice) {
+        utterance.voice = jaVoice;
+      }
+
       window.speechSynthesis.speak(utterance);
     } else {
-      alert("Trình duyệt của bạn không hỗ trợ phát âm thanh.");
+      alert("Thiết bị của bạn không hỗ trợ phát âm thanh (Vui lòng dùng Chrome/Safari).");
     }
   };
 
