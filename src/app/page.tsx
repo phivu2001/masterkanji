@@ -55,12 +55,15 @@ export default function Home() {
         strokeColor: isDarkMode ? '#FFFFFF' : '#1E293B', // Slate 800
         outlineColor: isDarkMode ? '#334155' : '#E2E8F0', // Slate 700 / Slate 200
         charDataLoader: (char, onComplete) => {
-          fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data-jp@2.0.1/${char}.json`)
-            .then(res => res.json())
+          fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data-jp/${char}.json`)
+            .then(res => {
+              if (!res.ok) throw new Error('Not found');
+              return res.json();
+            })
             .then(onComplete)
             .catch(() => {
               // Fallback to chinese data
-              fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data@2.0.1/${char}.json`)
+              fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data/${char}.json`)
                 .then(res => res.json())
                 .then(onComplete)
                 .catch(console.error);
@@ -192,7 +195,7 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-slate-100 dark:bg-slate-700 flex flex-col items-center justify-center p-4 font-sans">
         <div className="max-w-2xl w-full bg-white dark:bg-slate-800 rounded-3xl shadow-xl overflow-hidden p-10 text-center border border-slate-200 dark:border-slate-700">
-          <div className="bg-red-50 dark:bg-red-900/300 text-white font-bold rounded-2xl w-24 h-24 flex items-center justify-center font-[Noto_Sans_JP] text-5xl mx-auto mb-6 shadow-lg shadow-red-200">漢</div>
+          <div className="bg-red-500 text-white font-bold rounded-2xl w-24 h-24 flex items-center justify-center font-[Noto_Sans_JP] text-5xl mx-auto mb-6 shadow-lg shadow-red-200">漢</div>
           <h1 className="text-4xl font-black text-slate-800 dark:text-slate-100 mb-4">KanjiMaster</h1>
           <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-lg mb-10">Chọn cấp độ để bắt đầu học ngay hôm nay</p>
           
@@ -300,7 +303,7 @@ export default function Home() {
           <div className="flex justify-between h-16">
             <div className="flex items-center">
               <div onClick={() => { setSelectedLevel(null); setSelectedLesson(null); }} className="flex-shrink-0 flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" title="Quay lại Trang Chủ">
-                <div className="bg-red-50 dark:bg-red-900/300 text-white font-bold rounded-lg w-8 h-8 flex items-center justify-center font-[Noto_Sans_JP] text-lg">漢</div>
+                <div className="bg-red-500 text-white font-bold rounded-lg w-8 h-8 flex items-center justify-center font-[Noto_Sans_JP] text-lg">漢</div>
                 <span className="font-bold text-xl text-slate-800 dark:text-slate-100">KanjiMaster</span>
               </div>
               <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
@@ -345,7 +348,7 @@ export default function Home() {
                 <button onClick={previousKanji} className="flex-1 sm:flex-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 dark:bg-slate-900 font-medium transition-colors">
                   <i className="fas fa-arrow-left mr-2"></i>Trở lại
                 </button>
-                <button onClick={nextKanji} className="flex-1 sm:flex-none bg-red-50 dark:bg-red-900/300 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-red-600 font-medium transition-colors">
+                <button onClick={nextKanji} className="flex-1 sm:flex-none bg-red-500 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-red-600 font-medium transition-colors">
                   Tiếp theo <i className="fas fa-arrow-right ml-2"></i>
                 </button>
               </>
@@ -497,7 +500,7 @@ export default function Home() {
                   <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{currentIndex + 1} / {total}</span>
                 </div>
                 <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5 mb-4">
-                  <div className="bg-red-50 dark:bg-red-900/300 h-2.5 rounded-full transition-all duration-300" style={{ width: `${((currentIndex + 1) / total) * 100}%` }}></div>
+                  <div className="bg-red-500 h-2.5 rounded-full transition-all duration-300" style={{ width: `${((currentIndex + 1) / total) * 100}%` }}></div>
                 </div>
                 <div className="flex items-center justify-between mb-2 mt-4">
                   <span className="text-sm text-slate-600 dark:text-slate-300">Cần ôn tập</span>
