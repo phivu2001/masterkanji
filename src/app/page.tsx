@@ -342,6 +342,19 @@ export default function Home() {
                     {userProgress[data.id]?.status === 'hard' && <span className="absolute top-4 left-4 bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded"><i className="fas fa-exclamation-circle mr-1"></i> Hay sai</span>}
                     <div className="text-[100px] leading-none font-[Noto_Sans_JP] font-bold text-slate-800 dark:text-slate-100 mt-4">{data.kanji}</div>
                     <div className="text-xl font-bold text-slate-600 dark:text-slate-300 mt-4 uppercase tracking-widest">{data.hanviet}</div>
+                    
+                    <div className="mt-8 flex flex-col items-center">
+                      <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">Thứ tự nét chữ</h3>
+                      <div className="w-24 h-24 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center p-2 opacity-80 hover:opacity-100 transition-opacity">
+                        <img 
+                          src={`https://raw.githubusercontent.com/KanjiVG/kanjivg/master/kanji/0${data.kanji.charCodeAt(0).toString(16).padStart(4, '0').toLowerCase()}.svg`} 
+                          alt={`Thứ tự nét ${data.kanji}`}
+                          className="w-full h-full object-contain filter dark:invert"
+                          title={`Hướng dẫn viết chữ ${data.kanji}`}
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
+                      </div>
+                    </div>
                   </div>
                   
                   <div className="md:w-2/3 p-6 sm:p-8">
