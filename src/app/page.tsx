@@ -206,10 +206,10 @@ export default function Home() {
     
     if (isCorrect) {
       setQuizScore(prev => prev + 1);
-      // Auto next after 2 seconds to give time to read ON/KUN
+      // Auto next after 5 seconds to give time to read ON/KUN
       setTimeout(() => {
         nextQuizQuestion();
-      }, 2000);
+      }, 5000);
     } else {
       setQuizWrongAnswers(prev => {
         // Chỉ thêm nếu chưa có (trường hợp click nhanh nhiều lần)
