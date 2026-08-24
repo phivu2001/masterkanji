@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { kanjiData } from '@/data/kanji';
+import { extraVocab } from '@/data/extraVocab';
 import HanziWriter from 'hanzi-writer';
 
 export default function Home() {
@@ -467,7 +468,7 @@ export default function Home() {
                 <div className="p-6 sm:p-8 bg-white dark:bg-slate-800">
                   <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-4 border-l-4 border-red-500 pl-3">Từ vựng thường gặp</h3>
                   <div className="space-y-3">
-                    {data.vocabularies.map((voc, i) => (
+                    {[...data.vocabularies, ...(extraVocab[data.kanji] || []).filter(ev => !data.vocabularies.some(v => v.kanji === ev.kanji))].map((voc, i) => (
                       <div 
                         key={i} 
                         onClick={() => speakText(voc.kanji)}
