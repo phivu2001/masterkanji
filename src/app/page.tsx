@@ -10,12 +10,27 @@ export default function Home() {
   const [selectedLesson, setSelectedLesson] = useState<number | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
-  const [mode, setMode] = useState<'learn' | 'review' | 'list'>('learn');
+  const [mode, setMode] = useState<'learn' | 'review' | 'list' | 'quiz'>('learn');
   const [reviewCount, setReviewCount] = useState(12);
   const [userProgress, setUserProgress] = useState<Record<string, { status: 'learned' | 'learning' | 'hard' }>>({});
   const [showSearch, setShowSearch] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Quiz States
+  const [isQuizSelectionMode, setIsQuizSelectionMode] = useState(false);
+  const [selectedQuizLessons, setSelectedQuizLessons] = useState<number[]>([]);
+  
+  type QuizQuestion = {
+    kanjiData: typeof kanjiData[0];
+    options: { meaning: string, isCorrect: boolean }[];
+  };
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
+  const [quizScore, setQuizScore] = useState(0);
+  const [quizWrongAnswers, setQuizWrongAnswers] = useState<typeof kanjiData[0][]>([]);
+  const [quizStatus, setQuizStatus] = useState<'idle' | 'answering' | 'answered' | 'finished'>('idle');
+  const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('kanjiProgress');
@@ -142,7 +157,83 @@ export default function Home() {
     }
     nextKanji();
   };
+  const startQuiz = () => {
+    const quizDataPool: typeof kanjiData = [];
+    const levelData = kanjiData.filter(k => k.level === selectedLevel);
+    
+    selectedQuizLessons.forEach(lessonIdx => {
+      const startIdx = lessonIdx * WORDS_PER_LESSON;
+      const endIdx = Math.min((lessonIdx + 1) * WORDS_PER_LESSON, levelData.length);
+      quizDataPool.push(...levelData.slice(startIdx, endIdx));
+    });
 
+    if (quizDataPool.length === 0) return;
+
+    // Trộn ngẫu nhiên câu hỏi
+    const shuffledQuestions = [...quizDataPool].sort(() => Math.random() - 0.5);
+    
+    // Tạo mảng options cho mỗi câu hỏi
+    const questions = shuffledQuestions.map(questionKanji => {
+      const distractors = kanjiData
+        .filter(k => k.id !== questionKanji.id && k.meaning !== questionKanji.meaning)
+        .sort(() => Math.random() - 0.5)
+        .slice(0, 3);
+      
+      const options = [
+        { meaning: questionKanji.meaning, isCorrect: true },
+        ...distractors.map(d => ({ meaning: d.meaning, isCorrect: false }))
+      ].sort(() => Math.random() - 0.5); // Shuffle options
+      
+      return { kanjiData: questionKanji, options };
+    });
+
+    setQuizQuestions(questions);
+    setCurrentQuizIndex(0);
+    setQuizScore(0);
+    setQuizWrongAnswers([]);
+    setQuizStatus('answering');
+    setSelectedOptionIndex(null);
+    setMode('quiz');
+  };
+
+  const handleQuizAnswer = (optionIdx: number) => {
+    if (quizStatus !== 'answering') return;
+    
+    setSelectedOptionIndex(optionIdx);
+    setQuizStatus('answered');
+    
+    const isCorrect = quizQuestions[currentQuizIndex].options[optionIdx].isCorrect;
+    
+    if (isCorrect) {
+      setQuizScore(prev => prev + 1);
+      // Auto next after 1 second
+      setTimeout(() => {
+        nextQuizQuestion();
+      }, 1000);
+    } else {
+      setQuizWrongAnswers(prev => {
+        // Chỉ thêm nếu chưa có (trường hợp click nhanh nhiều lần)
+        if (!prev.find(k => k.id === quizQuestions[currentQuizIndex].kanjiData.id)) {
+          return [...prev, quizQuestions[currentQuizIndex].kanjiData];
+        }
+        return prev;
+      });
+    }
+  };
+
+  const nextQuizQuestion = () => {
+    setCurrentQuizIndex(prev => {
+      const nextIdx = prev + 1;
+      if (nextIdx < quizQuestions.length) {
+        setQuizStatus('answering');
+        setSelectedOptionIndex(null);
+        return nextIdx;
+      } else {
+        setQuizStatus('finished');
+        return prev;
+      }
+    });
+  };
   const toggleReviewMode = () => {
     if (mode === 'learn') {
       setMode('review');
@@ -237,15 +328,27 @@ export default function Home() {
 
 
   // Chọn Bài Học (Lesson Selection)
-  if (selectedLesson === null) {
+  if (selectedLesson === null && mode !== 'quiz') {
     return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-8 font-sans">
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-8 font-sans pb-24">
         <div className="max-w-5xl mx-auto">
-          <div className="flex items-center mb-8 gap-4">
-            <button onClick={() => setSelectedLevel(null)} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:bg-slate-700 transition-colors">
-              <i className="fas fa-arrow-left text-slate-600 dark:text-slate-300"></i>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+            <div className="flex items-center gap-4">
+              <button onClick={() => setSelectedLevel(null)} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:bg-slate-700 transition-colors">
+                <i className="fas fa-arrow-left text-slate-600 dark:text-slate-300"></i>
+              </button>
+              <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100">Lộ trình {selectedLevel}</h1>
+            </div>
+            
+            <button 
+              onClick={() => {
+                setIsQuizSelectionMode(!isQuizSelectionMode);
+                setSelectedQuizLessons([]);
+              }}
+              className={`px-4 py-2 rounded-lg font-bold border-2 transition-all flex items-center gap-2 ${isQuizSelectionMode ? 'bg-red-500 border-red-500 text-white' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-red-300'}`}
+            >
+              <i className="fas fa-tasks"></i> {isQuizSelectionMode ? 'Hủy chọn bài' : 'Chế độ ôn tập (Quiz)'}
             </button>
-            <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100">Lộ trình {selectedLevel}</h1>
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
@@ -258,22 +361,44 @@ export default function Home() {
                 if (userProgress[k.id]?.status === 'learned') learnedCount++;
               });
               const isCompleted = learnedCount === lessonKanji.length;
+              const isSelectedForQuiz = selectedQuizLessons.includes(i);
               
               return (
                 <button 
                   key={i}
-                  onClick={() => { setSelectedLesson(i); setCurrentIndex(0); setMode('learn'); setIsFlipped(false); }}
-                  className={`bg-white dark:bg-slate-800 border ${isCompleted ? 'border-green-400' : 'border-slate-200 dark:border-slate-700'} hover:border-red-400 p-6 rounded-2xl shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between h-40 group relative overflow-hidden`}
+                  onClick={() => { 
+                    if (isQuizSelectionMode) {
+                      if (isSelectedForQuiz) {
+                        setSelectedQuizLessons(prev => prev.filter(l => l !== i));
+                      } else {
+                        setSelectedQuizLessons(prev => [...prev, i]);
+                      }
+                    } else {
+                      setSelectedLesson(i); setCurrentIndex(0); setMode('learn'); setIsFlipped(false); 
+                    }
+                  }}
+                  className={`bg-white dark:bg-slate-800 border-2 ${isSelectedForQuiz ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : (isCompleted ? 'border-green-400' : 'border-slate-200 dark:border-slate-700 hover:border-red-400')} p-6 rounded-2xl shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between h-40 group relative overflow-hidden`}
                 >
-                  {isCompleted && <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 dark:bg-green-900/30 rounded-bl-full -z-0"></div>}
+                  {isCompleted && !isSelectedForQuiz && <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 dark:bg-green-900/30 rounded-bl-full -z-0"></div>}
+                  
+                  {isQuizSelectionMode && (
+                    <div className="absolute top-4 right-4 z-20">
+                      <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${isSelectedForQuiz ? 'bg-red-500 border-red-500 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
+                        {isSelectedForQuiz && <i className="fas fa-check text-xs"></i>}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex justify-between items-start w-full relative z-10">
                     <span className="font-bold text-slate-700 dark:text-slate-200 text-lg flex items-center gap-2">
                       Bài {i + 1}
-                      {isCompleted && <i className="fas fa-check-circle text-green-500 text-sm"></i>}
+                      {isCompleted && !isQuizSelectionMode && <i className="fas fa-check-circle text-green-500 text-sm"></i>}
                     </span>
-                    <span className={`text-xs font-bold px-2 py-1 rounded-full ${isCompleted ? 'bg-green-100 text-green-700' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>
-                      {learnedCount}/{lessonKanji.length} thuộc
-                    </span>
+                    {!isQuizSelectionMode && (
+                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${isCompleted ? 'bg-green-100 text-green-700' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>
+                        {learnedCount}/{lessonKanji.length} thuộc
+                      </span>
+                    )}
                   </div>
                   <div className="mt-4 relative z-10">
                     <div className="text-2xl font-[Noto_Sans_JP] text-slate-400 dark:text-slate-500 group-hover:text-red-500 transition-colors truncate">
@@ -285,6 +410,18 @@ export default function Home() {
             })}
           </div>
         </div>
+
+        {isQuizSelectionMode && selectedQuizLessons.length > 0 && (
+          <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40 flex justify-center">
+            <button 
+              onClick={startQuiz}
+              className="bg-red-500 hover:bg-red-600 text-white font-bold text-lg px-8 py-3 rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center gap-3"
+            >
+              <i className="fas fa-play-circle text-xl"></i>
+              Bắt đầu Quiz ({selectedQuizLessons.length} bài đã chọn)
+            </button>
+          </div>
+        )}
 
         {/* Floating Dark Mode Toggle */}
         <button 
@@ -298,6 +435,132 @@ export default function Home() {
     );
   }
 
+  // Chế độ Quiz (Trắc nghiệm)
+  if (mode === 'quiz') {
+    if (quizQuestions.length === 0) return null;
+    
+    if (quizStatus === 'finished') {
+      return (
+        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-8 font-sans pb-24 flex items-center justify-center">
+          <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-lg max-w-2xl w-full border-t-8 border-red-500">
+            <h2 className="text-3xl font-black text-center text-slate-800 dark:text-slate-100 mb-6">Kết quả Quiz</h2>
+            
+            <div className="flex flex-col items-center justify-center mb-8">
+              <div className="text-6xl font-black text-red-500 mb-2">{quizScore} / {quizQuestions.length}</div>
+              <p className="text-slate-500 dark:text-slate-400">câu trả lời đúng</p>
+            </div>
+
+            {quizWrongAnswers.length > 0 && (
+              <div className="mb-8">
+                <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-4 border-b pb-2 dark:border-slate-700">Các chữ Kanji cần ôn tập thêm:</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {quizWrongAnswers.map((k, idx) => (
+                    <div key={idx} className="flex items-center gap-4 bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
+                      <div className="text-3xl font-[Noto_Sans_JP] font-bold text-slate-800 dark:text-slate-100">{k.kanji}</div>
+                      <div>
+                        <div className="font-bold text-slate-700 dark:text-slate-200">{k.hanviet}</div>
+                        <div className="text-sm text-slate-500 dark:text-slate-400">{k.meaning}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-center gap-4">
+              <button 
+                onClick={startQuiz}
+                className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-6 py-3 rounded-xl font-bold hover:bg-red-100 dark:hover:bg-red-800/50 transition-colors"
+              >
+                <i className="fas fa-redo mr-2"></i> Làm lại
+              </button>
+              <button 
+                onClick={() => { setMode('learn'); setSelectedLesson(null); setIsQuizSelectionMode(false); setSelectedQuizLessons([]); }}
+                className="bg-slate-800 dark:bg-slate-700 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-700 dark:hover:bg-slate-600 transition-colors"
+              >
+                Về Lộ trình
+              </button>
+            </div>
+          </div>
+          <button 
+            onClick={toggleDarkMode} 
+            className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
+          >
+            <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
+          </button>
+        </div>
+      );
+    }
+
+    const currentQ = quizQuestions[currentQuizIndex];
+    return (
+      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 sm:p-8 font-sans flex flex-col items-center">
+        <div className="w-full max-w-3xl flex justify-between items-center mb-8">
+          <button onClick={() => { setMode('learn'); setSelectedLesson(null); setIsQuizSelectionMode(false); setSelectedQuizLessons([]); }} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:bg-slate-700 transition-colors">
+            <i className="fas fa-times text-slate-600 dark:text-slate-300"></i>
+          </button>
+          <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-full font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-sm">
+            Câu {currentQuizIndex + 1} / {quizQuestions.length}
+          </div>
+          <div className="w-10"></div> {/* Spacer for centering */}
+        </div>
+
+        <div className="w-full max-w-3xl flex-1 flex flex-col items-center justify-center">
+          <div className="bg-white dark:bg-slate-800 w-full rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 sm:p-12 mb-8 flex flex-col items-center">
+            <h3 className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mb-4">Chữ này có nghĩa là gì?</h3>
+            <div className="text-[120px] leading-none font-[Noto_Sans_JP] font-black text-slate-800 dark:text-slate-100">{currentQ.kanjiData.kanji}</div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
+            {currentQ.options.map((opt, idx) => {
+              let btnClass = "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-red-400 dark:hover:border-red-500 hover:bg-slate-50 dark:hover:bg-slate-700";
+              
+              if (quizStatus === 'answered') {
+                if (opt.isCorrect) {
+                  btnClass = "bg-green-500 border-green-600 text-white shadow-lg shadow-green-500/30 scale-[1.02]";
+                } else if (idx === selectedOptionIndex && !opt.isCorrect) {
+                  btnClass = "bg-red-500 border-red-600 text-white opacity-80";
+                } else {
+                  btnClass = "bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 opacity-50";
+                }
+              }
+
+              return (
+                <button
+                  key={idx}
+                  disabled={quizStatus !== 'answering'}
+                  onClick={() => handleQuizAnswer(idx)}
+                  className={`p-6 rounded-2xl border-2 font-bold text-lg transition-all duration-300 ${btnClass} flex items-center justify-between`}
+                >
+                  <span>{opt.meaning}</span>
+                  {quizStatus === 'answered' && opt.isCorrect && <i className="fas fa-check-circle text-xl"></i>}
+                  {quizStatus === 'answered' && idx === selectedOptionIndex && !opt.isCorrect && <i className="fas fa-times-circle text-xl"></i>}
+                </button>
+              );
+            })}
+          </div>
+
+          {quizStatus === 'answered' && (
+            <div className="mt-8 w-full flex justify-end">
+              <button 
+                onClick={nextQuizQuestion}
+                className="bg-slate-800 dark:bg-white text-white dark:text-slate-800 font-bold px-8 py-3 rounded-xl hover:scale-105 transition-transform flex items-center gap-2"
+              >
+                Tiếp theo <i className="fas fa-arrow-right"></i>
+              </button>
+            </div>
+          )}
+        </div>
+
+        <button 
+          onClick={toggleDarkMode} 
+          className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
+        >
+          <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-sans min-h-screen">
