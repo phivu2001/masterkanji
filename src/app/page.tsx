@@ -169,9 +169,19 @@ export default function Home() {
             </button>
           </div>
         </div>
+
+        {/* Floating Dark Mode Toggle */}
+        <button 
+          onClick={toggleDarkMode} 
+          className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
+          title={isDarkMode ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
+        >
+          <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-xl`}></i>
+        </button>
       </div>
     );
   }
+
 
   // Chọn Bài Học (Lesson Selection)
   if (selectedLesson === null) {
@@ -222,9 +232,19 @@ export default function Home() {
             })}
           </div>
         </div>
+
+        {/* Floating Dark Mode Toggle */}
+        <button 
+          onClick={toggleDarkMode} 
+          className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
+          title={isDarkMode ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
+        >
+          <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-xl`}></i>
+        </button>
       </div>
     );
   }
+
 
   return (
     <div className="bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-sans min-h-screen">
@@ -251,9 +271,6 @@ export default function Home() {
               </div>
             </div>
             <div className="flex items-center gap-4">
-              <button onClick={toggleDarkMode} className="text-slate-500 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors" title="Giao diện tối/sáng">
-                <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-lg`}></i>
-              </button>
               <button onClick={() => setShowSearch(true)} className="sm:hidden text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-red-500">
                 <i className="fas fa-search"></i>
               </button>
@@ -534,6 +551,15 @@ export default function Home() {
           </div>
         </div>
       )}
+
+      {/* Floating Dark Mode Toggle (Hiển thị trên mọi màn hình) */}
+      <button 
+        onClick={toggleDarkMode} 
+        className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
+        title={isDarkMode ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
+      >
+        <i className={`fas ${isDarkMode ? 'fa-sun' : 'fa-moon'} text-xl`}></i>
+      </button>
     </div>
   );
 }
