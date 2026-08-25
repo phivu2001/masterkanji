@@ -1,4 +1,8 @@
-export const extraVocab: Record<string, { kanji: string, reading: string, meaning: string }[]> = {
+import { kanjiData } from './kanji';
+
+type ExtraVocabulary = { kanji: string; reading: string; meaning: string };
+
+const generatedExtraVocab: Record<string, ExtraVocabulary[]> = {
   "働": [
     {
       "kanji": "働く",
@@ -305,13 +309,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "meaning": "mờ"
     }
   ],
-  "民": [
-    {
-      "kanji": "市民",
-      "reading": "しみん",
-      "meaning": "thị dân"
-    }
-  ],
   "暑": [
     {
       "kanji": "暑い",
@@ -338,18 +335,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "kanji": "木綿",
       "reading": "もめん きわた ゆふ ゆう",
       "meaning": "bông"
-    }
-  ],
-  "由": [
-    {
-      "kanji": "理由",
-      "reading": "りゆう わけ",
-      "meaning": "nguyên do"
-    },
-    {
-      "kanji": "自由",
-      "reading": "じゆう",
-      "meaning": "sự tự do"
     }
   ],
   "黄": [
@@ -392,13 +377,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "kanji": "苦い",
       "reading": "にがい",
       "meaning": "đắng"
-    }
-  ],
-  "皆": [
-    {
-      "kanji": "皆さん",
-      "reading": "みなさん みんなさん",
-      "meaning": "mọi người"
     }
   ],
   "階": [
@@ -508,13 +486,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "kanji": "大人",
       "reading": "おとな うし たいじん おおびと だいにん",
       "meaning": "người lớn"
-    }
-  ],
-  "丁": [
-    {
-      "kanji": "丁寧",
-      "reading": "ていねい",
-      "meaning": "cẩn thận"
     }
   ],
   "院": [
@@ -648,13 +619,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "kanji": "読む",
       "reading": "よむ",
       "meaning": "đọc"
-    }
-  ],
-  "束": [
-    {
-      "kanji": "約束",
-      "reading": "やくそく",
-      "meaning": "lời hứa"
     }
   ],
   "事": [
@@ -885,13 +849,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "meaning": "hàng"
     }
   ],
-  "合": [
-    {
-      "kanji": "合う",
-      "reading": "あう おう",
-      "meaning": "ăn khớp"
-    }
-  ],
   "試": [
     {
       "kanji": "試験",
@@ -978,13 +935,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "kanji": "大使館",
       "reading": "たいしかん",
       "meaning": "đại sứ quán"
-    }
-  ],
-  "官": [
-    {
-      "kanji": "警官",
-      "reading": "けいかん",
-      "meaning": "cánh sát"
     }
   ],
   "曜": [
@@ -1105,23 +1055,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "meaning": "phương tây"
     }
   ],
-  "予": [
-    {
-      "kanji": "予約",
-      "reading": "よやく",
-      "meaning": "dự ước"
-    },
-    {
-      "kanji": "予定",
-      "reading": "よてい",
-      "meaning": "dự định"
-    },
-    {
-      "kanji": "予習",
-      "reading": "よしゅう",
-      "meaning": "sự soạn bài"
-    }
-  ],
   "発": [
     {
       "kanji": "発音",
@@ -1203,13 +1136,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "kanji": "世界",
       "reading": "せかい",
       "meaning": "thế giới"
-    }
-  ],
-  "介": [
-    {
-      "kanji": "紹介",
-      "reading": "しょうかい",
-      "meaning": "sự giới thiệu"
     }
   ],
   "味": [
@@ -1332,13 +1258,6 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
       "kanji": "午後",
       "reading": "ごご うまあと",
       "meaning": "vào buổi chiều"
-    }
-  ],
-  "周": [
-    {
-      "kanji": "周り",
-      "reading": "まわり",
-      "meaning": "vùng xung quanh"
     }
   ],
   "母": [
@@ -1539,3 +1458,12 @@ export const extraVocab: Record<string, { kanji: string, reading: string, meanin
     }
   ]
 };
+
+// Chỉ xuất khóa thuộc dữ liệu Kanji hiện tại. Nếu API chưa có dữ liệu phụ,
+// dùng bộ từ vựng đã được biên soạn trong bản ghi chính để bảo đảm không có lỗ hổng.
+export const extraVocab = Object.fromEntries(
+  kanjiData.map((item) => [
+    item.kanji,
+    generatedExtraVocab[item.kanji] ?? item.vocabularies,
+  ]),
+) as Record<string, ExtraVocabulary[]>;

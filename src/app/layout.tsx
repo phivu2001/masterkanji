@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -15,17 +15,20 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "KanjiMaster - Học Kanji hiệu quả",
   description: "Ứng dụng học Kanji N5 - N4 với hệ thống Spaced Repetition, Từ điển thông minh và Flashcards.",
+  applicationName: "KanjiMaster",
+  manifest: "/manifest.webmanifest",
 };
+
+export const viewport: Viewport = { themeColor: "#ef4444" };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang="vi"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
         <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet" />
-        <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet" />
       </head>
       <body className="min-h-full flex flex-col">{children}</body>
     </html>

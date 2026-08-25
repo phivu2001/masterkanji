@@ -2,17 +2,19 @@ const fs = require('fs');
 const path = require('path');
 
 const dataDir = path.join(__dirname, 'src/data');
-const files = fs.readdirSync(dataDir).filter(f => f.endsWith('.ts') && (f.startsWith('n5_') || f.startsWith('n4_')));
+const files = fs.readdirSync(dataDir).filter((file) => (
+  file === 'kanji.ts'
+  || file === 'jlptAdditions.ts'
+  || /^n[45]_part\d+\.ts$/.test(file)
+));
 
 const kanjis = [];
 files.forEach(file => {
   const content = fs.readFileSync(path.join(dataDir, file), 'utf8');
-  const matches = content.match(/kanji:\s*['"](.)['"]/g);
-  if (matches) {
-    matches.forEach(m => {
-      const k = m.replace(/kanji:\s*['"]/, '').replace(/['"]/, '');
-      if (k && k.length === 1 && !kanjis.includes(k)) kanjis.push(k);
-    });
+  const entries = content.matchAll(/\{\s*id:\s*(['"])[^'"]+\1,\s*kanji:\s*(['"])(.)\2/g);
+  for (const entry of entries) {
+    const kanji = entry[3];
+    if (kanji && !kanjis.includes(kanji)) kanjis.push(kanji);
   }
 });
 
@@ -34,6 +36,7 @@ async function fetchExtraVocab() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ dict: 'javi', type: 'word', query: k, limit: 50, page: 1 })
         });
+        if (!res.ok) throw new Error(`Mazii returned HTTP ${res.status}`);
         const data = await res.json();
         
         const added = [];
@@ -57,8 +60,8 @@ async function fetchExtraVocab() {
           }
         }
         if (added.length > 0) extraVocab[k] = added;
-      } catch (e) {
-        // ignore
+      } catch (error) {
+        console.warn(`Could not fetch vocabulary for ${k}:`, error.message);
       }
       processed++;
     }));
@@ -66,7 +69,11 @@ async function fetchExtraVocab() {
   }
   
   const outFile = path.join(dataDir, 'extraVocab.ts');
-  fs.writeFileSync(outFile, `export const extraVocab: Record<string, { kanji: string, reading: string, meaning: string }[]> = ${JSON.stringify(extraVocab, null, 2)};\n`);
+  if (Object.keys(extraVocab).length === 0) {
+    throw new Error('No vocabulary was returned; keeping the existing extraVocab.ts file.');
+  }
+  const generatedSource = `import { kanjiData } from './kanji';\n\ntype ExtraVocabulary = { kanji: string; reading: string; meaning: string };\n\nconst generatedExtraVocab: Record<string, ExtraVocabulary[]> = ${JSON.stringify(extraVocab, null, 2)};\n\nexport const extraVocab = Object.fromEntries(\n  kanjiData.map((item) => [item.kanji, generatedExtraVocab[item.kanji] ?? item.vocabularies]),\n) as Record<string, ExtraVocabulary[]>;\n`;
+  fs.writeFileSync(outFile, generatedSource);
   console.log(`Done! Saved to ${outFile}`);
 }
 

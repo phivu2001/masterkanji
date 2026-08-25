@@ -13,6 +13,9 @@ import { n4Part8Data } from './n4_part8';
 import { n4Part9Data } from './n4_part9';
 import { n4Part10Data } from './n4_part10';
 import { n4Part11Data } from './n4_part11';
+import { jlptAdditions } from './jlptAdditions';
+import { getJlptCoreLevel, JLPT_N4_CORE_ORDER, JLPT_N5_CORE_ORDER } from './jlptCore';
+import type { JLPTLevel } from './jlptCore';
 
 export interface KanjiComponent {
     kanji: string;
@@ -32,13 +35,14 @@ export interface KanjiInfo {
     meaning: string;
     onyomi: string;
     kunyomi: string;
-    level: string;
+    level: JLPTLevel;
+    isSupplemental?: boolean;
     components: KanjiComponent[];
     mnemonic: string;
     vocabularies: Vocabulary[];
 }
 
-export const kanjiData: KanjiInfo[] = [
+const rawKanjiData: KanjiInfo[] = [
     // ==========================================
     // N5 KANJI (28 KANJI)
     // ==========================================
@@ -106,5 +110,46 @@ export const kanjiData: KanjiInfo[] = [
     ...n4Part8Data,
     ...n4Part9Data,
     ...n4Part10Data,
-    ...n4Part11Data
+    ...n4Part11Data,
+    ...jlptAdditions,
 ];
+
+const coreOrder = new Map(
+    [...JLPT_N5_CORE_ORDER, ...JLPT_N4_CORE_ORDER].map((kanji, index) => [kanji, index]),
+);
+
+// Hợp nhất các bản ghi trùng Kanji. Nếu một chữ có nhiều bản ghi, ưu tiên bản
+// được gắn đúng cấp độ lõi; các chữ ngoài bộ lõi vẫn được giữ làm nội dung bổ sung.
+const normalizedByKanji = new Map<string, KanjiInfo>();
+for (const item of rawKanjiData) {
+    const existing = normalizedByKanji.get(item.kanji);
+    const coreLevel = getJlptCoreLevel(item.kanji);
+    const shouldReplace = !existing || (coreLevel === item.level && existing.level !== coreLevel);
+    if (shouldReplace) normalizedByKanji.set(item.kanji, item);
+}
+
+const usedIds = new Set<string>();
+export const kanjiData: KanjiInfo[] = [...normalizedByKanji.values()]
+    .map((item) => {
+        const coreLevel = getJlptCoreLevel(item.kanji);
+        let id = item.id;
+        if (usedIds.has(id)) {
+            id = `${item.id}-${item.kanji.codePointAt(0)?.toString(16)}`;
+        }
+        usedIds.add(id);
+
+        return {
+            ...item,
+            id,
+            level: coreLevel ?? item.level,
+            isSupplemental: coreLevel === null,
+        };
+    })
+    .sort((a, b) => {
+        const aOrder = coreOrder.get(a.kanji);
+        const bOrder = coreOrder.get(b.kanji);
+        if (aOrder !== undefined && bOrder !== undefined) return aOrder - bOrder;
+        if (aOrder !== undefined) return -1;
+        if (bOrder !== undefined) return 1;
+        return a.kanji.localeCompare(b.kanji, 'ja');
+    });

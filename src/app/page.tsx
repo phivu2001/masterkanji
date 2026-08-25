@@ -1,970 +1,265 @@
 "use client";
 
-import { useState, useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { HomeDashboard } from '@/components/HomeDashboard';
+import { LessonLibrary } from '@/components/LessonLibrary';
+import { QuizScreen } from '@/components/QuizScreen';
+import { SearchModal } from '@/components/SearchModal';
+import { StudyScreen } from '@/components/StudyScreen';
 import { kanjiData } from '@/data/kanji';
-import { extraVocab } from '@/data/extraVocab';
-import HanziWriter from 'hanzi-writer';
+import type { KanjiInfo } from '@/data/kanji';
+import { getJlptStudyOrder, JLPT_N4_CORE_ORDER } from '@/data/jlptCore';
+import type { JLPTLevel } from '@/data/jlptCore';
+import { useStudyStore } from '@/hooks/useStudyStore';
+import { isDue, type PersonalSet, type ReviewQuality } from '@/lib/study';
+
+type AppView = 'home' | 'lessons' | 'study' | 'quiz';
+type StudySource = 'lesson' | 'review' | 'favorites' | 'personal' | 'search' | 'filtered';
+type StudySession = { ids: string[]; label: string; source: StudySource; lessonIndex: number | null };
+type QuizSession = { pool: KanjiInfo[]; mode: 'practice' | 'exam' };
+
+const WORDS_PER_LESSON = 10;
+const kanjiById = new Map(kanjiData.map((item) => [item.id, item]));
+const kanjiByCharacter = new Map(kanjiData.map((item) => [item.kanji, item]));
+
+const getRouteData = (level: JLPTLevel, n4Only: boolean) => {
+  const characters = level === 'N4' && n4Only ? JLPT_N4_CORE_ORDER : getJlptStudyOrder(level);
+  return characters.map((character) => kanjiByCharacter.get(character)).filter((item): item is KanjiInfo => Boolean(item));
+};
 
 export default function Home() {
-  const [selectedLevel, setSelectedLevel] = useState<'N5' | 'N4' | null>(null);
+  const store = useStudyStore();
+  const [view, setView] = useState<AppView>('home');
+  const [selectedLevel, setSelectedLevel] = useState<JLPTLevel>('N5');
   const [selectedLesson, setSelectedLesson] = useState<number | null>(null);
+  const [studySession, setStudySession] = useState<StudySession | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [mode, setMode] = useState<'learn' | 'review' | 'list' | 'quiz'>('learn');
-  const [reviewCount, setReviewCount] = useState(12);
-  const [userProgress, setUserProgress] = useState<Record<string, { status: 'learned' | 'learning' | 'hard' }>>({});
+  const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
   const [showSearch, setShowSearch] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [notice, setNotice] = useState('');
+  const importInputRef = useRef<HTMLInputElement>(null);
 
-  // Quiz States
-  const [isQuizSelectionMode, setIsQuizSelectionMode] = useState(false);
-  const [selectedQuizLessons, setSelectedQuizLessons] = useState<number[]>([]);
-  
-  type QuizQuestion = {
-    kanjiData: typeof kanjiData[0];
-    options: { meaning: string, isCorrect: boolean }[];
-  };
-  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
-  const [currentQuizIndex, setCurrentQuizIndex] = useState(0);
-  const [quizScore, setQuizScore] = useState(0);
-  const [quizWrongAnswers, setQuizWrongAnswers] = useState<typeof kanjiData[0][]>([]);
-  const [quizStatus, setQuizStatus] = useState<'idle' | 'answering' | 'answered' | 'finished'>('idle');
-  const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
-  const quizTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const routeData = useMemo(() => getRouteData(selectedLevel, store.settings.n4Only), [selectedLevel, store.settings.n4Only]);
+  const totalLessons = Math.ceil(routeData.length / WORDS_PER_LESSON);
+  const sessionItems = useMemo(() => (studySession?.ids ?? []).map((id) => kanjiById.get(id)).filter((item): item is KanjiInfo => Boolean(item)), [studySession]);
+  const allCoreData = useMemo(() => getJlptStudyOrder('N4').map((character) => kanjiByCharacter.get(character)).filter((item): item is KanjiInfo => Boolean(item)), []);
+  const dashboardStats = useMemo(() => ({
+    learned: allCoreData.filter((item) => store.progress[item.id]?.status === 'learned').length,
+    learning: allCoreData.filter((item) => store.progress[item.id]?.status === 'learning').length,
+    hard: allCoreData.filter((item) => store.progress[item.id]?.status === 'hard').length,
+    due: allCoreData.filter((item) => isDue(store.progress[item.id])).length,
+  }), [allCoreData, store.progress]);
+  const hardestKanji = useMemo(() => allCoreData
+    .map((item) => ({ id: item.id, kanji: item.kanji, hanviet: item.hanviet, incorrect: store.progress[item.id]?.incorrectCount ?? 0 }))
+    .filter((item) => item.incorrect > 0)
+    .sort((a, b) => b.incorrect - a.incorrect)
+    .slice(0, 5), [allCoreData, store.progress]);
 
   useEffect(() => {
-    const saved = localStorage.getItem('kanjiProgress');
-    if (saved) {
-      try {
-        setUserProgress(JSON.parse(saved));
-      } catch (e) {}
-    }
-    
-    // Load dark mode preference
-    if (localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-      setIsDarkMode(true);
-    }
+    const frame = requestAnimationFrame(() => {
+      const dark = localStorage.theme === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches);
+      setIsDarkMode(dark);
+    });
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   useEffect(() => {
-    // Add or remove class based on state
-    if (isDarkMode) {
-      document.documentElement.classList.add('dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-    }
+    document.documentElement.classList.toggle('dark', isDarkMode);
+    localStorage.theme = isDarkMode ? 'dark' : 'light';
   }, [isDarkMode]);
 
-  const writerRef = useRef<HTMLDivElement>(null);
-  const writerInstance = useRef<any>(null);
-
-  const initHanziWriter = (kanji: string) => {
-    if (writerRef.current) {
-      writerRef.current.innerHTML = ''; // Xoá SVG cũ
-      writerInstance.current = HanziWriter.create(writerRef.current, kanji, {
-        width: 120,
-        height: 120,
-        padding: 5,
-        showOutline: true,
-        strokeAnimationSpeed: 1,
-        delayBetweenStrokes: 50,
-        strokeColor: isDarkMode ? '#FFFFFF' : '#1E293B', // Slate 800
-        outlineColor: isDarkMode ? '#334155' : '#E2E8F0', // Slate 700 / Slate 200
-        charDataLoader: (char, onComplete) => {
-          fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data-jp/${char}.json`)
-            .then(res => {
-              if (!res.ok) throw new Error('Not found');
-              return res.json();
-            })
-            .then(onComplete)
-            .catch(() => {
-              // Fallback to chinese data
-              fetch(`https://cdn.jsdelivr.net/npm/hanzi-writer-data/${char}.json`)
-                .then(res => res.json())
-                .then(onComplete)
-                .catch(console.error);
-            });
-        }
-      });
-    }
-  };
-
-  const animateStrokes = () => {
-    writerInstance.current?.animateCharacter();
-  };
-
-  const quizStrokes = () => {
-    writerInstance.current?.quiz();
-  };
-
-  const toggleDarkMode = () => {
-    setIsDarkMode(!isDarkMode);
-    if (!isDarkMode) {
-      localStorage.theme = 'dark';
-    } else {
-      localStorage.theme = 'light';
-    }
-  };
-
-  const updateProgress = (id: string, status: 'learned' | 'learning' | 'hard') => {
-    setUserProgress(prev => {
-      const updated = { ...prev, [id]: { status } };
-      localStorage.setItem('kanjiProgress', JSON.stringify(updated));
-      return updated;
-    });
-  };
-  
-  const WORDS_PER_LESSON = 10;
-
-  // Lọc dữ liệu theo cấp độ đã chọn
-  const levelData = kanjiData.filter(k => k.level === selectedLevel);
-  const totalLessons = Math.ceil(levelData.length / WORDS_PER_LESSON);
-  
-  // Lọc dữ liệu theo bài học
-  const lessonData = selectedLesson !== null 
-    ? levelData.slice(selectedLesson * WORDS_PER_LESSON, (selectedLesson + 1) * WORDS_PER_LESSON) 
-    : [];
-  const total = lessonData.length;
-  const data = lessonData[currentIndex] || lessonData[0]; // Tránh lỗi khi mảng rỗng tạm thời
-  
   useEffect(() => {
-    if (data?.kanji && mode === 'learn' && selectedLesson !== null) {
-      // Đợi DOM render div canvas
-      setTimeout(() => initHanziWriter(data.kanji), 100);
+    if (!notice) return;
+    const timer = window.setTimeout(() => setNotice(''), 3_500);
+    return () => window.clearTimeout(timer);
+  }, [notice]);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    if (!store.settings.reminderEnabled || !('Notification' in window)) return;
+    const notifyIfNeeded = () => {
+      if (Notification.permission !== 'granted' || new Date().getHours() !== store.settings.reminderHour) return;
+      const reminderKey = `kanjiReminder-${new Date().toISOString().slice(0, 10)}`;
+      if (localStorage.getItem(reminderKey) || dashboardStats.due === 0) return;
+      new Notification('KanjiMaster', { body: `Bạn có ${dashboardStats.due} chữ Kanji đến hạn ôn.`, icon: '/icon.svg' });
+      localStorage.setItem(reminderKey, 'sent');
+    };
+    notifyIfNeeded();
+    const timer = window.setInterval(notifyIfNeeded, 60_000);
+    return () => window.clearInterval(timer);
+  }, [dashboardStats.due, store.settings.reminderEnabled, store.settings.reminderHour]);
+
+  const selectLevel = (level: JLPTLevel) => {
+    setSelectedLevel(level);
+    setSelectedLesson(null);
+    setView('lessons');
+  };
+
+  const openLesson = (lessonIndex: number, filteredIds?: string[], startIndex = 0) => {
+    const data = getRouteData(selectedLevel, store.settings.n4Only);
+    const lesson = data.slice(lessonIndex * WORDS_PER_LESSON, (lessonIndex + 1) * WORDS_PER_LESSON);
+    const ids = filteredIds?.length ? filteredIds : lesson.map((item) => item.id);
+    setSelectedLesson(lessonIndex);
+    setStudySession({ ids, label: filteredIds?.length ? 'Bộ lọc bài học' : 'Học bài mới', source: filteredIds?.length ? 'filtered' : 'lesson', lessonIndex });
+    const safeIndex = Math.min(Math.max(0, startIndex), Math.max(0, ids.length - 1));
+    setCurrentIndex(safeIndex);
+    store.saveLastPosition({ level: selectedLevel, lesson: lessonIndex, index: safeIndex });
+    setView('study');
+  };
+
+  const startSession = (ids: string[], label: string, source: StudySource) => {
+    if (ids.length === 0) {
+      setNotice('Bộ này chưa có Kanji để học.');
+      return;
     }
-  }, [data?.kanji, isDarkMode, mode, selectedLesson, currentIndex]);
+    setStudySession({ ids, label, source, lessonIndex: null });
+    setSelectedLesson(null);
+    setCurrentIndex(0);
+    setView('study');
+  };
+
+  const continueLearning = () => {
+    const position = store.lastPosition;
+    if (!position) return;
+    setSelectedLevel(position.level);
+    const data = getRouteData(position.level, store.settings.n4Only);
+    const maxLesson = Math.max(0, Math.ceil(data.length / WORDS_PER_LESSON) - 1);
+    const lesson = Math.min(position.lesson, maxLesson);
+    const lessonItems = data.slice(lesson * WORDS_PER_LESSON, (lesson + 1) * WORDS_PER_LESSON);
+    setSelectedLesson(lesson);
+    setStudySession({ ids: lessonItems.map((item) => item.id), label: 'Học tiếp', source: 'lesson', lessonIndex: lesson });
+    setCurrentIndex(Math.min(position.index, Math.max(0, lessonItems.length - 1)));
+    setView('study');
+  };
+
+  const startFavorites = () => startSession(store.favorites, 'Kanji yêu thích', 'favorites');
+  const startPersonalSet = (set: PersonalSet) => startSession(set.kanjiIds, set.name, 'personal');
+  const startReview = (ids: string[]) => startSession(ids, 'Ôn tập SRS', 'review');
+
+  const moveToIndex = (nextIndex: number) => {
+    if (!studySession || sessionItems.length === 0) return;
+    const safeIndex = Math.min(Math.max(0, nextIndex), sessionItems.length - 1);
+    setCurrentIndex(safeIndex);
+    if (studySession.source === 'lesson' && studySession.lessonIndex !== null) store.saveLastPosition({ level: selectedLevel, lesson: studySession.lessonIndex, index: safeIndex });
+  };
+
   const nextKanji = () => {
-    if (currentIndex < total - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setIsFlipped(false);
+    if (currentIndex < sessionItems.length - 1) {
+      moveToIndex(currentIndex + 1);
+    } else if (studySession?.source === 'lesson' && selectedLesson !== null && selectedLesson < totalLessons - 1) {
+      openLesson(selectedLesson + 1);
     } else {
-      alert("Bạn đã hoàn thành bài học này! Hãy quay lại chọn bài tiếp theo.");
+      setNotice('Bạn đã hoàn thành phiên học này.');
     }
   };
 
-  const handleFlashcardResponse = (quality: 'lai' | 'kho' | 'tot') => {
-    // Map quality to status
-    const statusMap: Record<'lai' | 'kho' | 'tot', 'hard' | 'learning' | 'learned'> = { 
-      'lai': 'hard', 
-      'kho': 'learning', 
-      'tot': 'learned' 
-    };
-    updateProgress(data.id, statusMap[quality]);
-
-    // Nếu đang ôn tập, giảm số từ cần ôn tập
-    if (mode === 'review' && reviewCount > 0) {
-      setReviewCount(prev => prev - 1);
+  const rateCurrentKanji = (quality: ReviewQuality) => {
+    const item = sessionItems[currentIndex];
+    if (!item || !studySession) return;
+    store.reviewKanji(item.id, quality);
+    if (studySession.source === 'review') {
+      const remaining = studySession.ids.filter((id) => id !== item.id);
+      if (remaining.length === 0) {
+        setNotice('Đã hoàn thành toàn bộ chữ đến hạn ôn.');
+        setView('lessons');
+        setStudySession(null);
+        return;
+      }
+      setStudySession({ ...studySession, ids: remaining });
+      setCurrentIndex(Math.min(currentIndex, remaining.length - 1));
+      return;
     }
     nextKanji();
   };
-  const startQuiz = () => {
-    const quizDataPool: typeof kanjiData = [];
-    const levelData = kanjiData.filter(k => k.level === selectedLevel);
-    
-    selectedQuizLessons.forEach(lessonIdx => {
-      const startIdx = lessonIdx * WORDS_PER_LESSON;
-      const endIdx = Math.min((lessonIdx + 1) * WORDS_PER_LESSON, levelData.length);
-      quizDataPool.push(...levelData.slice(startIdx, endIdx));
-    });
 
-    if (quizDataPool.length === 0) return;
-
-    // Trộn ngẫu nhiên câu hỏi
-    const shuffledQuestions = [...quizDataPool].sort(() => Math.random() - 0.5);
-    
-    // Tạo mảng options cho mỗi câu hỏi
-    const questions = shuffledQuestions.map(questionKanji => {
-      const distractors = kanjiData
-        .filter(k => k.id !== questionKanji.id && k.meaning !== questionKanji.meaning)
-        .sort(() => Math.random() - 0.5)
-        .slice(0, 3);
-      
-      const options = [
-        { meaning: questionKanji.meaning, isCorrect: true },
-        ...distractors.map(d => ({ meaning: d.meaning, isCorrect: false }))
-      ].sort(() => Math.random() - 0.5); // Shuffle options
-      
-      return { kanjiData: questionKanji, options };
-    });
-
-    setQuizQuestions(questions);
-    setCurrentQuizIndex(0);
-    setQuizScore(0);
-    setQuizWrongAnswers([]);
-    setQuizStatus('answering');
-    setSelectedOptionIndex(null);
-    setMode('quiz');
-    if (quizTimeoutRef.current) clearTimeout(quizTimeoutRef.current);
+  const startQuiz = (pool: KanjiInfo[], mode: 'practice' | 'exam') => {
+    if (pool.length < 4) {
+      setNotice('Cần ít nhất 4 chữ Kanji để tạo Quiz.');
+      return;
+    }
+    setQuizSession({ pool, mode });
+    setView('quiz');
   };
 
-  const handleQuizAnswer = (optionIdx: number) => {
-    if (quizStatus !== 'answering') return;
-    
-    setSelectedOptionIndex(optionIdx);
-    setQuizStatus('answered');
-    
-    const isCorrect = quizQuestions[currentQuizIndex].options[optionIdx].isCorrect;
-    
-    if (isCorrect) {
-      setQuizScore(prev => prev + 1);
-      // Auto next after 5 seconds to give time to read ON/KUN
-      if (quizTimeoutRef.current) clearTimeout(quizTimeoutRef.current);
-      quizTimeoutRef.current = setTimeout(() => {
-        nextQuizQuestion();
-      }, 5000);
-    } else {
-      setQuizWrongAnswers(prev => {
-        // Chỉ thêm nếu chưa có (trường hợp click nhanh nhiều lần)
-        if (!prev.find(k => k.id === quizQuestions[currentQuizIndex].kanjiData.id)) {
-          return [...prev, quizQuestions[currentQuizIndex].kanjiData];
-        }
-        return prev;
-      });
+  const completeQuiz = (result: { score: number; total: number; wrongIds: string[] }) => {
+    store.addQuizHistory({ level: selectedLevel, score: result.score, total: result.total, mode: quizSession?.mode ?? 'practice' });
+    result.wrongIds.forEach((id) => store.reviewKanji(id, 'again'));
+  };
+
+  const openSearchResult = (item: KanjiInfo) => {
+    setSelectedLevel(item.level);
+    setStudySession({ ids: [item.id], label: item.isSupplemental ? 'Kanji mở rộng' : 'Kết quả tra cứu', source: 'search', lessonIndex: null });
+    setSelectedLesson(null);
+    setCurrentIndex(0);
+    setShowSearch(false);
+    setView('study');
+  };
+
+  const exportBackup = () => {
+    const blob = new Blob([JSON.stringify(store.createBackup(), null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = `kanjimaster-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const exportCsv = () => {
+    const escapeCell = (value: string) => `"${value.replaceAll('"', '""')}"`;
+    const rows = [
+      ['Kanji', 'Hán Việt', 'Nghĩa', 'Onyomi', 'Kunyomi', 'Từ vựng', 'Cấp độ'],
+      ...allCoreData.map((item) => [item.kanji, item.hanviet, item.meaning, item.onyomi, item.kunyomi, item.vocabularies.map((vocabulary) => `${vocabulary.kanji}: ${vocabulary.meaning}`).join(' | '), item.level]),
+    ];
+    const csv = `\uFEFF${rows.map((row) => row.map(escapeCell).join(',')).join('\n')}`;
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = 'kanjimaster-anki.csv';
+    anchor.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const importBackup = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      store.restoreBackup(JSON.parse(await file.text()));
+      setNotice('Đã khôi phục dữ liệu học tập thành công.');
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : 'Không thể đọc tệp sao lưu.');
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = '';
     }
   };
 
-  const nextQuizQuestion = () => {
-    if (quizTimeoutRef.current) {
-      clearTimeout(quizTimeoutRef.current);
-      quizTimeoutRef.current = null;
+  const enableReminder = async () => {
+    if (!('Notification' in window)) {
+      setNotice('Trình duyệt này không hỗ trợ thông báo.');
+      return;
     }
-    setCurrentQuizIndex(prev => {
-      const nextIdx = prev + 1;
-      if (nextIdx < quizQuestions.length) {
-        setQuizStatus('answering');
-        setSelectedOptionIndex(null);
-        return nextIdx;
-      } else {
-        setQuizStatus('finished');
-        return prev;
-      }
-    });
-  };
-  const toggleReviewMode = () => {
-    if (mode === 'learn') {
-      setMode('review');
-      // Lấy random 1 từ để ôn tập
-      setCurrentIndex(Math.floor(Math.random() * total));
-    } else {
-      setMode('learn');
-      setCurrentIndex(0);
-    }
-    setIsFlipped(false);
+    const permission = await Notification.requestPermission();
+    store.updateSettings({ reminderEnabled: permission === 'granted' });
+    if (permission !== 'granted') setNotice('Bạn cần cho phép thông báo để bật nhắc học.');
   };
 
-  const previousKanji = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-      setIsFlipped(false);
-    }
-  };
+  if (!store.hydrated) return <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-slate-500"><i className="fas fa-circle-notch fa-spin mr-2"></i>Đang tải bàn học...</div>;
 
-  const speakText = (text: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ja-JP';
-      utterance.rate = 0.8;
-      
-      const voices = window.speechSynthesis.getVoices();
-      // Tìm giọng Google 日本語 hoặc bất kỳ giọng tiếng Nhật nào
-      const jaVoice = voices.find(voice => 
-        voice.name.includes('Google') && voice.lang.includes('ja') || 
-        voice.lang === 'ja-JP' || 
-        voice.lang.includes('ja')
-      );
-      
-      if (jaVoice) {
-        utterance.voice = jaVoice;
-      }
-
-      // Hack nhỏ: Chrome đôi khi cần delay 50ms để không bị kẹt khi cancel()
-      setTimeout(() => {
-        window.speechSynthesis.speak(utterance);
-      }, 50);
-    } else {
-      alert("Thiết bị của bạn không hỗ trợ phát âm thanh.");
-    }
-  };
-
-  // Nếu chưa chọn cấp độ, hiển thị Trang Chủ
-  if (!selectedLevel) {
-    return (
-      <div className="min-h-screen bg-slate-100 dark:bg-slate-700 flex flex-col items-center justify-center p-4 font-sans">
-        <div className="max-w-2xl w-full bg-white dark:bg-slate-800 rounded-3xl shadow-xl overflow-hidden p-10 text-center border border-slate-200 dark:border-slate-700">
-          <div className="bg-red-500 text-white font-bold rounded-2xl w-24 h-24 flex items-center justify-center font-[Noto_Sans_JP] text-5xl mx-auto mb-6 shadow-lg shadow-red-200">漢</div>
-          <h1 className="text-4xl font-black text-slate-800 dark:text-slate-100 mb-4">KanjiMaster</h1>
-          <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-lg mb-10">Chọn cấp độ để bắt đầu học ngay hôm nay</p>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Card N5 */}
-            <button onClick={() => { setSelectedLevel('N5'); setSelectedLesson(null); }} className="group text-left border-2 border-slate-200 dark:border-slate-700 hover:border-red-500 rounded-2xl p-6 transition-all hover:shadow-lg bg-white dark:bg-slate-800 relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-red-50 dark:bg-red-900/30 rounded-bl-full -z-0 transition-transform duration-500 group-hover:scale-150"></div>
-               <h2 className="text-4xl font-black text-red-500 mb-2 relative z-10">N5</h2>
-               <p className="font-bold text-slate-800 dark:text-slate-100 text-lg relative z-10">Kanji Nhập môn</p>
-               <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm mt-2 relative z-10 leading-relaxed">
-                 {kanjiData.filter(k => k.level === 'N5').length} chữ Kanji nền tảng. Dành cho người mới bắt đầu học tiếng Nhật.
-               </p>
-            </button>
-            
-            {/* Card N4 */}
-            <button onClick={() => { setSelectedLevel('N4'); setSelectedLesson(null); }} className="group text-left border-2 border-slate-200 dark:border-slate-700 hover:border-blue-500 rounded-2xl p-6 transition-all hover:shadow-lg bg-white dark:bg-slate-800 relative overflow-hidden">
-               <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 dark:bg-blue-900/30 rounded-bl-full -z-0 transition-transform duration-500 group-hover:scale-150"></div>
-               <h2 className="text-4xl font-black text-blue-500 mb-2 relative z-10">N4</h2>
-               <p className="font-bold text-slate-800 dark:text-slate-100 text-lg relative z-10">Kanji Sơ trung cấp</p>
-               <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500 text-sm mt-2 relative z-10 leading-relaxed">
-                 {kanjiData.filter(k => k.level === 'N4').length} chữ Kanji trung cấp. Giúp bạn tự tin đọc hiểu các đoạn văn dài.
-               </p>
-            </button>
-          </div>
-        </div>
-
-        {/* Floating Dark Mode Toggle */}
-        <button 
-          onClick={toggleDarkMode} 
-          className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
-          title={isDarkMode ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
-        >
-          <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
-        </button>
-      </div>
-    );
+  let content;
+  if (view === 'home') {
+    content = <HomeDashboard {...dashboardStats} streak={store.streak} todayLearned={store.todayActivity.newLearned} lastPosition={store.lastPosition} settings={store.settings} personalSets={store.personalSets} favoriteCount={store.favorites.length} quizHistory={store.quizHistory} hardest={hardestKanji} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onSelectLevel={selectLevel} onContinue={continueLearning} onUpdateSettings={store.updateSettings} onCreateSet={store.createSet} onRenameSet={store.renameSet} onDeleteSet={store.deleteSet} onStartSet={startPersonalSet} onStartFavorites={startFavorites} onExport={exportBackup} onExportCsv={exportCsv} onImport={() => importInputRef.current?.click()} onEnableReminder={enableReminder} />;
+  } else if (view === 'lessons') {
+    content = <LessonLibrary level={selectedLevel} levelData={routeData} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
+  } else if (view === 'quiz' && quizSession) {
+    content = <QuizScreen pool={quizSession.pool} level={selectedLevel} mode={quizSession.mode} settings={store.settings} onExit={() => { setQuizSession(null); setView('lessons'); }} onComplete={completeQuiz} />;
+  } else if (studySession && sessionItems.length > 0) {
+    content = <StudyScreen items={sessionItems} currentIndex={currentIndex} sessionLabel={studySession.label} lessonNumber={studySession.lessonIndex === null ? null : studySession.lessonIndex + 1} totalLessons={totalLessons} progress={store.progress} settings={store.settings} favorites={store.favorites} personalSets={store.personalSets} writingScores={store.writingScores} isReview={studySession.source === 'review'} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onBackToLessons={() => setView('lessons')} onHome={() => setView('home')} onSearch={() => setShowSearch(true)} onPrevious={() => moveToIndex(currentIndex - 1)} onNext={nextKanji} onPreviousLesson={() => { if (selectedLesson !== null && selectedLesson > 0) openLesson(selectedLesson - 1); }} onNextLesson={() => { if (selectedLesson !== null && selectedLesson < totalLessons - 1) openLesson(selectedLesson + 1); }} onSelectIndex={moveToIndex} onRate={rateCurrentKanji} onToggleFavorite={store.toggleFavorite} onToggleSet={store.toggleKanjiInSet} onSaveWritingScore={store.saveWritingScore} />;
+  } else {
+    content = <LessonLibrary level={selectedLevel} levelData={routeData} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
   }
 
-
-  // Chọn Bài Học (Lesson Selection)
-  if (selectedLesson === null && mode !== 'quiz') {
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-8 font-sans pb-24">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
-            <div className="flex items-center gap-4">
-              <button onClick={() => setSelectedLevel(null)} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:bg-slate-700 transition-colors">
-                <i className="fas fa-arrow-left text-slate-600 dark:text-slate-300"></i>
-              </button>
-              <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100">Lộ trình {selectedLevel}</h1>
-            </div>
-            
-            <button 
-              onClick={() => {
-                setIsQuizSelectionMode(!isQuizSelectionMode);
-                setSelectedQuizLessons([]);
-              }}
-              className={`px-4 py-2 rounded-lg font-bold border-2 transition-all flex items-center gap-2 ${isQuizSelectionMode ? 'bg-red-500 border-red-500 text-white' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-red-300'}`}
-            >
-              <i className="fas fa-tasks"></i> {isQuizSelectionMode ? 'Hủy chọn bài' : 'Chế độ ôn tập (Quiz)'}
-            </button>
-          </div>
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {Array.from({ length: totalLessons }).map((_, i) => {
-              const startIdx = i * WORDS_PER_LESSON;
-              const endIdx = Math.min((i + 1) * WORDS_PER_LESSON, levelData.length);
-              const lessonKanji = levelData.slice(startIdx, endIdx);
-              let learnedCount = 0;
-              lessonKanji.forEach(k => {
-                if (userProgress[k.id]?.status === 'learned') learnedCount++;
-              });
-              const isCompleted = learnedCount === lessonKanji.length;
-              const isSelectedForQuiz = selectedQuizLessons.includes(i);
-              
-              return (
-                <button 
-                  key={i}
-                  onClick={() => { 
-                    if (isQuizSelectionMode) {
-                      if (isSelectedForQuiz) {
-                        setSelectedQuizLessons(prev => prev.filter(l => l !== i));
-                      } else {
-                        setSelectedQuizLessons(prev => [...prev, i]);
-                      }
-                    } else {
-                      setSelectedLesson(i); setCurrentIndex(0); setMode('learn'); setIsFlipped(false); 
-                    }
-                  }}
-                  className={`bg-white dark:bg-slate-800 border-2 ${isSelectedForQuiz ? 'border-red-500 bg-red-50 dark:bg-red-900/20' : (isCompleted ? 'border-green-400' : 'border-slate-200 dark:border-slate-700 hover:border-red-400')} p-6 rounded-2xl shadow-sm hover:shadow-md transition-all text-left flex flex-col justify-between h-40 group relative overflow-hidden`}
-                >
-                  {isCompleted && !isSelectedForQuiz && <div className="absolute top-0 right-0 w-16 h-16 bg-green-50 dark:bg-green-900/30 rounded-bl-full -z-0"></div>}
-                  
-                  {isQuizSelectionMode && (
-                    <div className="absolute top-4 right-4 z-20">
-                      <div className={`w-6 h-6 rounded border-2 flex items-center justify-center transition-colors ${isSelectedForQuiz ? 'bg-red-500 border-red-500 text-white' : 'border-slate-300 dark:border-slate-600'}`}>
-                        {isSelectedForQuiz && <i className="fas fa-check text-xs"></i>}
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex justify-between items-start w-full relative z-10">
-                    <span className="font-bold text-slate-700 dark:text-slate-200 text-lg flex items-center gap-2">
-                      Bài {i + 1}
-                      {isCompleted && !isQuizSelectionMode && <i className="fas fa-check-circle text-green-500 text-sm"></i>}
-                    </span>
-                    {!isQuizSelectionMode && (
-                      <span className={`text-xs font-bold px-2 py-1 rounded-full ${isCompleted ? 'bg-green-100 text-green-700' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400 dark:text-slate-500'}`}>
-                        {learnedCount}/{lessonKanji.length} thuộc
-                      </span>
-                    )}
-                  </div>
-                  <div className="mt-4 relative z-10">
-                    <div className="text-2xl font-[Noto_Sans_JP] text-slate-400 dark:text-slate-500 group-hover:text-red-500 transition-colors truncate">
-                      {lessonKanji.map(k => k.kanji).join('')}
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {isQuizSelectionMode && selectedQuizLessons.length > 0 && (
-          <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 p-4 shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.1)] z-40 flex justify-center">
-            <button 
-              onClick={startQuiz}
-              className="bg-red-500 hover:bg-red-600 text-white font-bold text-lg px-8 py-3 rounded-xl shadow-lg transition-transform hover:scale-105 flex items-center gap-3"
-            >
-              <i className="fas fa-play-circle text-xl"></i>
-              Bắt đầu Quiz ({selectedQuizLessons.length} bài đã chọn)
-            </button>
-          </div>
-        )}
-
-        {/* Floating Dark Mode Toggle */}
-        <button 
-          onClick={toggleDarkMode} 
-          className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
-          title={isDarkMode ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
-        >
-          <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
-        </button>
-      </div>
-    );
-  }
-
-  // Chế độ Quiz (Trắc nghiệm)
-  if (mode === 'quiz') {
-    if (quizQuestions.length === 0) return null;
-    
-    if (quizStatus === 'finished') {
-      return (
-        <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-8 font-sans pb-24 flex items-center justify-center">
-          <div className="bg-white dark:bg-slate-800 p-8 rounded-2xl shadow-lg max-w-2xl w-full border-t-8 border-red-500">
-            <h2 className="text-3xl font-black text-center text-slate-800 dark:text-slate-100 mb-6">Kết quả Quiz</h2>
-            
-            <div className="flex flex-col items-center justify-center mb-8">
-              <div className="text-6xl font-black text-red-500 mb-2">{quizScore} / {quizQuestions.length}</div>
-              <p className="text-slate-500 dark:text-slate-400">câu trả lời đúng</p>
-            </div>
-
-            {quizWrongAnswers.length > 0 && (
-              <div className="mb-8">
-                <h3 className="text-lg font-bold text-slate-700 dark:text-slate-200 mb-4 border-b pb-2 dark:border-slate-700">Các chữ Kanji cần ôn tập thêm:</h3>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {quizWrongAnswers.map((k, idx) => (
-                    <div key={idx} className="flex items-center gap-4 bg-slate-50 dark:bg-slate-900 p-3 rounded-lg border border-slate-200 dark:border-slate-700">
-                      <div className="text-3xl font-[Noto_Sans_JP] font-bold text-slate-800 dark:text-slate-100">{k.kanji}</div>
-                      <div>
-                        <div className="font-bold text-slate-700 dark:text-slate-200">{k.hanviet}</div>
-                        <div className="text-sm text-slate-500 dark:text-slate-400">{k.meaning}</div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-center gap-4">
-              <button 
-                onClick={startQuiz}
-                className="bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400 px-6 py-3 rounded-xl font-bold hover:bg-red-100 dark:hover:bg-red-800/50 transition-colors"
-              >
-                <i className="fas fa-redo mr-2"></i> Làm lại
-              </button>
-              <button 
-                onClick={() => { if (quizTimeoutRef.current) clearTimeout(quizTimeoutRef.current); setMode('learn'); setSelectedLesson(null); setIsQuizSelectionMode(false); setSelectedQuizLessons([]); }}
-                className="bg-slate-800 dark:bg-slate-700 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-700 dark:hover:bg-slate-600 transition-colors"
-              >
-                Về Lộ trình
-              </button>
-            </div>
-          </div>
-          <button 
-            onClick={toggleDarkMode} 
-            className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
-          >
-            <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
-          </button>
-        </div>
-      );
-    }
-
-    const currentQ = quizQuestions[currentQuizIndex];
-    return (
-      <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 sm:p-8 font-sans flex flex-col items-center">
-        <div className="w-full max-w-3xl flex justify-between items-center mb-8">
-          <button onClick={() => { if (quizTimeoutRef.current) clearTimeout(quizTimeoutRef.current); setMode('learn'); setSelectedLesson(null); setIsQuizSelectionMode(false); setSelectedQuizLessons([]); }} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:bg-slate-700 transition-colors">
-            <i className="fas fa-times text-slate-600 dark:text-slate-300"></i>
-          </button>
-          <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-full font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-sm">
-            Câu {currentQuizIndex + 1} / {quizQuestions.length}
-          </div>
-          <div className="w-10"></div> {/* Spacer for centering */}
-        </div>
-
-        <div className="w-full max-w-3xl flex-1 flex flex-col items-center justify-center">
-          <div className="bg-white dark:bg-slate-800 w-full rounded-3xl shadow-lg border border-slate-200 dark:border-slate-700 p-8 sm:p-12 mb-8 flex flex-col items-center">
-            <h3 className="text-slate-400 dark:text-slate-500 font-bold uppercase tracking-widest mb-4">Chữ này có nghĩa là gì?</h3>
-            <div className="text-[120px] leading-none font-[Noto_Sans_JP] font-black text-slate-800 dark:text-slate-100">{currentQ.kanjiData.kanji}</div>
-            
-            <div 
-              className={`flex flex-col items-center gap-3 overflow-hidden transition-all duration-500 ease-in-out w-full ${quizStatus === 'answered' ? 'max-h-40 opacity-100 mt-8' : 'max-h-0 opacity-0 mt-0'}`}
-            >
-              <div className="flex flex-wrap gap-4 w-full justify-center">
-                {currentQ.kanjiData.onyomi && currentQ.kanjiData.onyomi !== '-' && (
-                  <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">ON</span>
-                    <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 px-3 py-1.5 rounded-lg text-sm font-bold border border-blue-100 dark:border-blue-800/50 shadow-sm">{currentQ.kanjiData.onyomi}</span>
-                  </div>
-                )}
-                {currentQ.kanjiData.kunyomi && currentQ.kanjiData.kunyomi !== '-' && (
-                  <div className="flex flex-col items-center">
-                    <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mb-1">KUN</span>
-                    <span className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 px-3 py-1.5 rounded-lg text-sm font-bold border border-emerald-100 dark:border-emerald-800/50 shadow-sm">{currentQ.kanjiData.kunyomi}</span>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 w-full">
-            {currentQ.options.map((opt, idx) => {
-              let btnClass = "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-slate-200 dark:border-slate-700 hover:border-red-400 dark:hover:border-red-500 hover:bg-slate-50 dark:hover:bg-slate-700";
-              
-              if (quizStatus === 'answered') {
-                if (opt.isCorrect) {
-                  btnClass = "bg-green-500 border-green-600 text-white shadow-lg shadow-green-500/30 scale-[1.02]";
-                } else if (idx === selectedOptionIndex && !opt.isCorrect) {
-                  btnClass = "bg-red-500 border-red-600 text-white opacity-80";
-                } else {
-                  btnClass = "bg-white dark:bg-slate-800 text-slate-400 dark:text-slate-500 border-slate-200 dark:border-slate-700 opacity-50";
-                }
-              }
-
-              return (
-                <button
-                  key={idx}
-                  disabled={quizStatus !== 'answering'}
-                  onClick={() => handleQuizAnswer(idx)}
-                  className={`p-6 rounded-2xl border-2 font-bold text-lg transition-all duration-300 ${btnClass} flex items-center justify-between`}
-                >
-                  <span>{opt.meaning}</span>
-                  {quizStatus === 'answered' && opt.isCorrect && <i className="fas fa-check-circle text-xl"></i>}
-                  {quizStatus === 'answered' && idx === selectedOptionIndex && !opt.isCorrect && <i className="fas fa-times-circle text-xl"></i>}
-                </button>
-              );
-            })}
-          </div>
-
-          {quizStatus === 'answered' && (
-            <div className="mt-8 w-full flex justify-end">
-              <button 
-                onClick={nextQuizQuestion}
-                className="bg-slate-800 dark:bg-white text-white dark:text-slate-800 font-bold px-8 py-3 rounded-xl hover:scale-105 transition-transform flex items-center gap-2"
-              >
-                Tiếp theo <i className="fas fa-arrow-right"></i>
-              </button>
-            </div>
-          )}
-        </div>
-
-        <button 
-          onClick={toggleDarkMode} 
-          className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
-        >
-          <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
-        </button>
-      </div>
-    );
-  }
-
-  const previousLesson = () => {
-    if (selectedLesson !== null && selectedLesson > 0) {
-      setSelectedLesson(selectedLesson - 1);
-      setCurrentIndex(0);
-      setMode('learn');
-      setIsFlipped(false);
-    }
-  };
-
-  const nextLesson = () => {
-    if (selectedLesson !== null && selectedLesson < totalLessons - 1) {
-      setSelectedLesson(selectedLesson + 1);
-      setCurrentIndex(0);
-      setMode('learn');
-      setIsFlipped(false);
-    }
-  };
-
-  return (
-    <div className="bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-sans min-h-screen">
-
-      {/* Navbar */}
-      <nav className="bg-white dark:bg-slate-800 shadow-sm border-b border-slate-200 dark:border-slate-700 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex items-center">
-              <div onClick={() => { setSelectedLevel(null); setSelectedLesson(null); }} className="flex-shrink-0 flex items-center gap-2 cursor-pointer hover:opacity-80 transition-opacity" title="Quay lại Trang Chủ">
-                <div className="bg-red-500 text-white font-bold rounded-lg w-8 h-8 flex items-center justify-center font-[Noto_Sans_JP] text-lg">漢</div>
-                <span className="font-bold text-xl text-slate-800 dark:text-slate-100">KanjiMaster</span>
-              </div>
-              <div className="hidden sm:ml-8 sm:flex sm:space-x-8">
-                <a href="#" className="border-red-500 text-slate-900 dark:text-white inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">Bàn làm việc</a>
-                <button onClick={() => setShowSearch(true)} className="border-transparent text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:border-slate-300 dark:border-slate-600 hover:text-slate-700 dark:text-slate-200 inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium">
-                  <i className="fas fa-search mr-2"></i>Từ điển
-                </button>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <button onClick={() => setShowSearch(true)} className="sm:hidden text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-red-500">
-                <i className="fas fa-search"></i>
-              </button>
-              <button onClick={() => setSelectedLesson(null)} className="text-sm text-slate-500 dark:text-slate-400 dark:text-slate-500 hover:text-red-500 font-medium mr-2">
-                <i className="fas fa-list-ul mr-1"></i> Mục lục
-              </button>
-              <span className="hidden sm:inline-block bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 px-3 py-1 rounded-full text-sm font-medium border border-slate-200 dark:border-slate-700">Trình độ: {selectedLevel}</span>
-            </div>
-          </div>
-        </div>
-      </nav>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
-        {/* Header Section */}
-        <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-          <div className="flex flex-col lg:flex-row lg:items-end gap-4">
-            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm w-max">
-              <button 
-                onClick={() => setSelectedLesson(null)} 
-                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors"
-                title="Quay lại mục lục các bài"
-              >
-                <i className="fas fa-list-ul"></i>
-              </button>
-              <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
-              <button 
-                onClick={previousLesson} 
-                disabled={selectedLesson === 0}
-                className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${selectedLesson === 0 ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'}`}
-                title="Bài trước"
-              >
-                <i className="fas fa-chevron-left"></i>
-              </button>
-              
-              <div className="flex flex-col items-center px-4 min-w-[140px]">
-                <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-0.5">Bài {selectedLesson! + 1}</span>
-                <span className="font-bold text-sm text-slate-800 dark:text-slate-100 whitespace-nowrap">{mode === 'learn' ? `Học bài mới` : mode === 'list' ? `Danh sách Kanji` : 'Ôn tập Flashcard'}</span>
-              </div>
-              
-              <button 
-                onClick={nextLesson} 
-                disabled={selectedLesson === totalLessons - 1}
-                className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${selectedLesson === totalLessons - 1 ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'}`}
-                title="Bài tiếp theo"
-              >
-                <i className="fas fa-chevron-right"></i>
-              </button>
-            </div>
-            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Mục tiêu bài này: {total} chữ • Đang xem: {currentIndex + 1}/{total}</p>
-          </div>
-          <div className="flex gap-2 w-full sm:w-auto">
-            <button onClick={() => setMode(mode === 'list' ? 'learn' : 'list')} className="flex-1 sm:flex-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 dark:bg-slate-900 font-medium transition-colors">
-              <i className={`fas ${mode === 'list' ? 'fa-book-open' : 'fa-list'} mr-2`}></i>{mode === 'list' ? 'Học tiếp' : 'Xem danh sách'}
-            </button>
-            {mode !== 'list' && (
-              <>
-                <button onClick={previousKanji} className="flex-1 sm:flex-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 dark:bg-slate-900 font-medium transition-colors">
-                  <i className="fas fa-arrow-left mr-2"></i>Trở lại
-                </button>
-                <button onClick={nextKanji} className="flex-1 sm:flex-none bg-red-500 text-white px-4 py-2 rounded-lg shadow-sm hover:bg-red-600 font-medium transition-colors">
-                  Tiếp theo <i className="fas fa-arrow-right ml-2"></i>
-                </button>
-              </>
-            )}
-          </div>
-        </div>
-
-        {mode === 'list' ? (
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 p-8">
-            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-5 gap-4">
-              {lessonData.map((k, idx) => (
-                <button 
-                  key={idx}
-                  onClick={() => {
-                    setCurrentIndex(idx);
-                    setMode('learn');
-                    setIsFlipped(false);
-                  }}
-                  className={`relative flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all hover:scale-105 ${idx === currentIndex ? 'border-red-500 bg-red-50 dark:bg-red-900/30' : 'border-slate-100 dark:border-slate-800 hover:border-red-300 bg-slate-50 dark:bg-slate-900'}`}
-                >
-                  {userProgress[k.id]?.status === 'learned' && <div className="absolute top-2 right-2 text-green-500" title="Đã thuộc"><i className="fas fa-check-circle"></i></div>}
-                  {userProgress[k.id]?.status === 'hard' && <div className="absolute top-2 right-2 text-red-500" title="Hay sai"><i className="fas fa-exclamation-circle"></i></div>}
-                  {userProgress[k.id]?.status === 'learning' && <div className="absolute top-2 right-2 text-blue-500" title="Đang học"><i className="fas fa-clock"></i></div>}
-                  <span className="font-[Noto_Sans_JP] text-4xl font-bold text-slate-800 dark:text-slate-100 mb-2">{k.kanji}</span>
-                  <span className="text-xs font-bold text-slate-500 dark:text-slate-400 dark:text-slate-500 uppercase">{k.hanviet}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Left Column: Kanji Details */}
-            <div className="lg:col-span-2">
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700 overflow-hidden">
-                <div className="flex flex-col md:flex-row border-b border-slate-100 dark:border-slate-800">
-                  <div className="md:w-1/3 bg-slate-50 dark:bg-slate-900 p-8 flex flex-col items-center justify-center border-r border-slate-100 dark:border-slate-800 relative min-h-[300px]">
-                    {!userProgress[data.id] && <span className="absolute top-4 left-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-xs font-bold px-2 py-1 rounded">Chưa học</span>}
-                    {userProgress[data.id]?.status === 'learned' && <span className="absolute top-4 left-4 bg-green-100 text-green-700 text-xs font-bold px-2 py-1 rounded"><i className="fas fa-check-circle mr-1"></i> Đã thuộc</span>}
-                    {userProgress[data.id]?.status === 'learning' && <span className="absolute top-4 left-4 bg-blue-100 text-blue-700 text-xs font-bold px-2 py-1 rounded"><i className="fas fa-clock mr-1"></i> Đang học</span>}
-                    {userProgress[data.id]?.status === 'hard' && <span className="absolute top-4 left-4 bg-red-100 text-red-700 text-xs font-bold px-2 py-1 rounded"><i className="fas fa-exclamation-circle mr-1"></i> Hay sai</span>}
-                    <div className="text-[100px] leading-none font-[Noto_Sans_JP] font-bold text-slate-800 dark:text-slate-100 mt-4">{data.kanji}</div>
-                    <div className="text-xl font-bold text-slate-600 dark:text-slate-300 mt-4 uppercase tracking-widest">{data.hanviet}</div>
-                    
-                    <div className="mt-8 flex flex-col items-center">
-                      <h3 className="text-xs font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">Thứ tự nét chữ</h3>
-                      <div 
-                        ref={writerRef}
-                        className="w-32 h-32 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center justify-center p-2 mb-3"
-                      >
-                        {/* HanziWriter Canvas will render here */}
-                      </div>
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={animateStrokes} 
-                          className="bg-blue-50 hover:bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:hover:bg-blue-800/50 dark:text-blue-400 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
-                        >
-                          <i className="fas fa-play"></i> Vẽ mẫu
-                        </button>
-                        <button 
-                          onClick={quizStrokes} 
-                          className="bg-green-50 hover:bg-green-100 text-green-600 dark:bg-green-900/30 dark:hover:bg-green-800/50 dark:text-green-400 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors flex items-center gap-2"
-                        >
-                          <i className="fas fa-pencil-alt"></i> Tập viết
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="md:w-2/3 p-6 sm:p-8">
-                    <div className="flex justify-between items-start mb-6">
-                      <div>
-                        <h2 className="text-lg font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-1">Ý nghĩa</h2>
-                        <p className="text-xl font-medium text-slate-800 dark:text-slate-100">{data.meaning}</p>
-                      </div>
-                      <button className="text-slate-400 dark:text-slate-500 hover:text-red-500 transition-colors">
-                        <i className="far fa-heart text-xl"></i>
-                      </button>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-6 mb-6">
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Âm On (Onyomi)</h3>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="bg-blue-50 dark:bg-blue-900/30 text-blue-700 px-3 py-1 rounded-md text-sm font-medium border border-blue-100">{data.onyomi}</span>
-                        </div>
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-2">Âm Kun (Kunyomi)</h3>
-                        <div className="flex flex-wrap gap-2">
-                          <span className="bg-emerald-50 text-emerald-700 px-3 py-1 rounded-md text-sm font-medium border border-emerald-100">{data.kunyomi}</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    <div className="mb-2">
-                      <h3 className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wide mb-3">Thành phần (Bộ thủ)</h3>
-                      <div className="flex gap-4 flex-wrap">
-                        {data.components.map((comp, i) => (
-                          <div key={i} className="flex items-center gap-2 bg-slate-50 dark:bg-slate-900 px-3 py-2 rounded-lg border border-slate-200 dark:border-slate-700">
-                            <span className="font-[Noto_Sans_JP] font-bold text-lg text-slate-700 dark:text-slate-200">{comp.kanji}</span>
-                            <span className="text-sm text-slate-600 dark:text-slate-300">{comp.meaning}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                    
-                    <div className="mt-4 bg-yellow-50 p-4 rounded-lg border border-yellow-100">
-                      <p className="text-sm text-yellow-800 leading-relaxed">
-                        <i className="fas fa-lightbulb text-yellow-500 mr-2"></i>
-                        <strong>Mẹo nhớ:</strong> {data.mnemonic}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                <div className="p-6 sm:p-8 bg-white dark:bg-slate-800">
-                  <h3 className="text-base font-bold text-slate-800 dark:text-slate-100 mb-4 border-l-4 border-red-500 pl-3">Từ vựng thường gặp</h3>
-                  <div className="space-y-3">
-                    {[...data.vocabularies, ...(extraVocab[data.kanji] || []).filter(ev => !data.vocabularies.some(v => v.kanji === ev.kanji))].map((voc, i) => (
-                      <div 
-                        key={i} 
-                        onClick={() => speakText(voc.kanji)}
-                        className="flex items-center justify-between p-4 bg-slate-50 dark:bg-slate-900 rounded-xl hover:bg-slate-100 dark:bg-slate-700 transition-colors border border-slate-100 dark:border-slate-800 cursor-pointer"
-                        title="Nhấn để nghe phát âm"
-                      >
-                        <div className="flex items-center gap-4">
-                          <div className="font-[Noto_Sans_JP] text-2xl font-bold text-slate-800 dark:text-slate-100">{voc.kanji}</div>
-                          <div>
-                            <div className="text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500 font-medium mb-1">{voc.reading}</div>
-                            <div className="text-sm text-slate-800 dark:text-slate-100">{voc.meaning}</div>
-                          </div>
-                        </div>
-                        <button className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:text-slate-300">
-                          <i className="fas fa-volume-up"></i>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-            
-            {/* Right Column */}
-            <div className="lg:col-span-1 space-y-6">
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Tiến độ hôm nay</h3>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm text-slate-600 dark:text-slate-300">Chữ mới</span>
-                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{currentIndex + 1} / {total}</span>
-                </div>
-                <div className="w-full bg-slate-100 dark:bg-slate-700 rounded-full h-2.5 mb-4">
-                  <div className="bg-red-500 h-2.5 rounded-full transition-all duration-300" style={{ width: `${((currentIndex + 1) / total) * 100}%` }}></div>
-                </div>
-                <div className="flex items-center justify-between mb-2 mt-4">
-                  <span className="text-sm text-slate-600 dark:text-slate-300">Cần ôn tập</span>
-                  <span className="text-sm font-bold text-orange-500">{reviewCount} chữ</span>
-                </div>
-                <button onClick={toggleReviewMode} className={`w-full mt-2 font-medium py-2 rounded-lg transition-colors ${mode === 'review' ? 'bg-orange-500 text-white hover:bg-orange-600' : 'bg-orange-100 text-orange-700 hover:bg-orange-200'}`}>
-                  {mode === 'review' ? 'Thoát Ôn Tập' : 'Ôn tập ngay'}
-                </button>
-              </div>
-              
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-slate-700">
-                <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Trải nghiệm Flashcard (Bấm để lật)</h3>
-                
-                <div 
-                  className="group bg-transparent perspective-1000 w-full h-64 cursor-pointer"
-                  onClick={() => setIsFlipped(!isFlipped)}
-                >
-                  <div className={`relative w-full h-full text-center transition-transform duration-700 transform-style-3d shadow-md rounded-2xl border border-slate-200 dark:border-slate-700 ${isFlipped ? 'rotate-y-180' : ''}`}>
-                    
-                    {/* Front */}
-                    <div className="absolute w-full h-full backface-hidden bg-white dark:bg-slate-800 text-black flex flex-col items-center justify-center p-4 rounded-2xl">
-                      <div className="text-6xl font-[Noto_Sans_JP] font-bold text-slate-800 dark:text-slate-100 mb-2">{data.kanji}</div>
-                      <div className="text-sm text-slate-400 dark:text-slate-500">Bấm chuột để lật thẻ</div>
-                    </div>
-                    
-                    {/* Back */}
-                    <div className="absolute w-full h-full backface-hidden bg-slate-50 dark:bg-slate-900 rotate-y-180 flex flex-col items-center justify-center p-6 rounded-2xl">
-                      <div className="text-lg font-bold text-slate-800 dark:text-slate-100 uppercase mb-1">{data.hanviet}</div>
-                      <div className="text-sm text-slate-600 dark:text-slate-300 mb-4 text-center">{data.meaning}</div>
-                      <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-2 shadow-sm border border-slate-100 dark:border-slate-800 text-left mb-2">
-                        <div className="text-xs text-slate-400 dark:text-slate-500">Onyomi</div>
-                        <div className="font-medium text-sm">{data.onyomi}</div>
-                      </div>
-                      <div className="w-full bg-white dark:bg-slate-800 rounded-lg p-2 shadow-sm border border-slate-100 dark:border-slate-800 text-left">
-                        <div className="text-xs text-slate-400 dark:text-slate-500">Kunyomi</div>
-                        <div className="font-medium text-sm">{data.kunyomi}</div>
-                      </div>
-                    </div>
-                    
-                  </div>
-                </div>
-                
-                <div className="flex justify-between mt-4 gap-2">
-                  <button onClick={() => handleFlashcardResponse('lai')} className="flex-1 py-2 bg-red-50 dark:bg-red-900/30 text-red-600 rounded-lg font-medium hover:bg-red-100 transition-colors">Lại (1p)</button>
-                  <button onClick={() => handleFlashcardResponse('kho')} className="flex-1 py-2 bg-blue-50 dark:bg-blue-900/30 text-blue-600 rounded-lg font-medium hover:bg-blue-100 transition-colors">Khó (10p)</button>
-                  <button onClick={() => handleFlashcardResponse('tot')} className="flex-1 py-2 bg-green-50 dark:bg-green-900/30 text-green-600 rounded-lg font-medium hover:bg-green-100 transition-colors">Tốt (1n)</button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-
-      {/* Search Modal */}
-      {showSearch && (
-        <div 
-          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex flex-col items-center pt-20 px-4"
-          onClick={() => { setShowSearch(false); setSearchQuery(''); }}
-        >
-          <div 
-            className="w-full max-w-2xl bg-white dark:bg-slate-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[80vh]"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center gap-3">
-              <i className="fas fa-search text-slate-400 dark:text-slate-500 text-xl"></i>
-              <input
-                autoFocus
-                type="text"
-                placeholder="Tra cứu Kanji, Hán Việt, hoặc Nghĩa..."
-                value={searchQuery}
-                onChange={e => setSearchQuery(e.target.value)}
-                className="flex-1 outline-none text-lg text-slate-700 dark:text-slate-200 bg-transparent"
-              />
-              <button onClick={() => { setShowSearch(false); setSearchQuery(''); }} className="text-slate-400 dark:text-slate-500 hover:text-red-500">
-                <i className="fas fa-times text-xl"></i>
-              </button>
-            </div>
-            
-            <div className="flex-1 overflow-y-auto p-4 bg-slate-50 dark:bg-slate-900">
-              {searchQuery.trim() === '' ? (
-                <div className="text-center text-slate-400 dark:text-slate-500 py-10">
-                  <i className="fas fa-book-open text-4xl mb-3"></i>
-                  <p>Nhập từ khóa để tra cứu trong {kanjiData.length} chữ Kanji</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {kanjiData.filter(k => 
-                    k.kanji.includes(searchQuery) || 
-                    k.hanviet.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                    k.meaning.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    k.onyomi.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                    k.kunyomi.toLowerCase().includes(searchQuery.toLowerCase())
-                  ).slice(0, 20).map((k, idx) => (
-                    <div key={idx} className="bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 flex gap-4 hover:border-red-300 transition-colors">
-                      <div className="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-lg flex items-center justify-center font-[Noto_Sans_JP] text-4xl font-bold text-slate-800 dark:text-slate-100">
-                        {k.kanji}
-                      </div>
-                      <div className="flex-1">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-bold text-slate-700 dark:text-slate-200 uppercase">{k.hanviet}</span>
-                          <span className="text-xs bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded text-slate-500 dark:text-slate-400 dark:text-slate-500">{k.level}</span>
-                          {userProgress[k.id]?.status === 'learned' && <i className="fas fa-check-circle text-green-500"></i>}
-                        </div>
-                        <p className="text-sm text-slate-600 dark:text-slate-300 mb-2">{k.meaning}</p>
-                        <div className="flex gap-4 text-xs text-slate-500 dark:text-slate-400 dark:text-slate-500">
-                          <span><strong className="text-slate-400 dark:text-slate-500 font-normal">On:</strong> {k.onyomi}</span>
-                          <span><strong className="text-slate-400 dark:text-slate-500 font-normal">Kun:</strong> {k.kunyomi}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Floating Dark Mode Toggle (Hiển thị trên mọi màn hình) */}
-      <button 
-        onClick={toggleDarkMode} 
-        className="fixed bottom-6 right-6 w-12 h-12 bg-slate-800 dark:bg-white text-white dark:text-slate-800 rounded-full shadow-lg flex items-center justify-center hover:scale-110 transition-transform z-50"
-        title={isDarkMode ? "Chuyển sang giao diện Sáng" : "Chuyển sang giao diện Tối"}
-      >
-        <i className={`fas ${isDarkMode ? 'fa-moon' : 'fa-sun'} text-xl`}></i>
-      </button>
-    </div>
-  );
+  return <>{content}<SearchModal open={showSearch} data={kanjiData} favorites={store.favorites} onClose={() => setShowSearch(false)} onOpenKanji={openSearchResult} onToggleFavorite={store.toggleFavorite} />{notice && <div role="status" className="fixed z-[120] bottom-5 left-1/2 -translate-x-1/2 max-w-[90vw] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-3 rounded-xl shadow-2xl font-bold text-sm"><i className="fas fa-circle-check text-green-400 mr-2"></i>{notice}</div>}<input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => importBackup(event.target.files?.[0])} /></>;
 }

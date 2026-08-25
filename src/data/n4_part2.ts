@@ -1,4 +1,4 @@
-import { KanjiInfo } from './kanji';
+import type { KanjiInfo } from './kanji';
 
 export const n4Part2Data: KanjiInfo[] = [
     // Places

@@ -1,4 +1,4 @@
-import { KanjiInfo } from './kanji';
+import type { KanjiInfo } from './kanji';
 
 export const n4Part1Data: KanjiInfo[] = [
     // Verbs of motion & action
