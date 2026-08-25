@@ -8,7 +8,7 @@ import { SearchModal } from '@/components/SearchModal';
 import { StudyScreen } from '@/components/StudyScreen';
 import { kanjiData } from '@/data/kanji';
 import type { KanjiInfo } from '@/data/kanji';
-import { getJlptStudyOrder, JLPT_N4_CORE_ORDER } from '@/data/jlptCore';
+import { getJlptLessons, getJlptStudyOrder } from '@/data/jlptCore';
 import type { JLPTLevel } from '@/data/jlptCore';
 import { useStudyStore } from '@/hooks/useStudyStore';
 import { isDue, type PersonalSet, type ReviewQuality } from '@/lib/study';
@@ -17,15 +17,18 @@ type AppView = 'home' | 'lessons' | 'study' | 'quiz';
 type StudySource = 'lesson' | 'review' | 'favorites' | 'personal' | 'search' | 'filtered';
 type StudySession = { ids: string[]; label: string; source: StudySource; lessonIndex: number | null };
 type QuizSession = { pool: KanjiInfo[]; mode: 'practice' | 'exam'; questionCount?: number; title?: string };
+type RouteLesson = { level: JLPTLevel; title: string; items: KanjiInfo[] };
 
-const WORDS_PER_LESSON = 10;
 const kanjiById = new Map(kanjiData.map((item) => [item.id, item]));
 const kanjiByCharacter = new Map(kanjiData.map((item) => [item.kanji, item]));
 
-const getRouteData = (level: JLPTLevel, n4Only: boolean) => {
-  const characters = level === 'N4' && n4Only ? JLPT_N4_CORE_ORDER : getJlptStudyOrder(level);
-  return characters.map((character) => kanjiByCharacter.get(character)).filter((item): item is KanjiInfo => Boolean(item));
-};
+const getRouteLessons = (level: JLPTLevel, n4Only: boolean): RouteLesson[] => getJlptLessons(level, n4Only)
+  .map((lesson) => ({
+    level: lesson.level,
+    title: lesson.title,
+    items: lesson.characters.map((character) => kanjiByCharacter.get(character)).filter((item): item is KanjiInfo => Boolean(item)),
+  }))
+  .filter((lesson) => lesson.items.length > 0);
 
 export default function Home() {
   const store = useStudyStore();
@@ -40,8 +43,9 @@ export default function Home() {
   const [notice, setNotice] = useState('');
   const importInputRef = useRef<HTMLInputElement>(null);
 
-  const routeData = useMemo(() => getRouteData(selectedLevel, store.settings.n4Only), [selectedLevel, store.settings.n4Only]);
-  const totalLessons = Math.ceil(routeData.length / WORDS_PER_LESSON);
+  const routeLessons = useMemo(() => getRouteLessons(selectedLevel, store.settings.n4Only), [selectedLevel, store.settings.n4Only]);
+  const routeData = useMemo(() => routeLessons.flatMap((lesson) => lesson.items), [routeLessons]);
+  const totalLessons = routeLessons.length;
   const sessionItems = useMemo(() => (studySession?.ids ?? []).map((id) => kanjiById.get(id)).filter((item): item is KanjiInfo => Boolean(item)), [studySession]);
   const allCoreData = useMemo(() => getJlptStudyOrder('N4').map((character) => kanjiByCharacter.get(character)).filter((item): item is KanjiInfo => Boolean(item)), []);
   const dashboardStats = useMemo(() => ({
@@ -100,11 +104,15 @@ export default function Home() {
   };
 
   const openLesson = (lessonIndex: number, filteredIds?: string[], startIndex = 0) => {
-    const data = getRouteData(selectedLevel, store.settings.n4Only);
-    const lesson = data.slice(lessonIndex * WORDS_PER_LESSON, (lessonIndex + 1) * WORDS_PER_LESSON);
-    const ids = filteredIds?.length ? filteredIds : lesson.map((item) => item.id);
+    const lessons = getRouteLessons(selectedLevel, store.settings.n4Only);
+    const lesson = lessons[lessonIndex];
+    if (!lesson) {
+      setNotice('Không tìm thấy bài học này.');
+      return;
+    }
+    const ids = filteredIds?.length ? filteredIds : lesson.items.map((item) => item.id);
     setSelectedLesson(lessonIndex);
-    setStudySession({ ids, label: filteredIds?.length ? 'Bộ lọc bài học' : 'Học bài mới', source: filteredIds?.length ? 'filtered' : 'lesson', lessonIndex });
+    setStudySession({ ids, label: filteredIds?.length ? `Bộ lọc • ${lesson.title}` : `${lesson.level} • ${lesson.title}`, source: filteredIds?.length ? 'filtered' : 'lesson', lessonIndex });
     const safeIndex = Math.min(Math.max(0, startIndex), Math.max(0, ids.length - 1));
     setCurrentIndex(safeIndex);
     store.saveLastPosition({ level: selectedLevel, lesson: lessonIndex, index: safeIndex });
@@ -126,13 +134,13 @@ export default function Home() {
     const position = store.lastPosition;
     if (!position) return;
     setSelectedLevel(position.level);
-    const data = getRouteData(position.level, store.settings.n4Only);
-    const maxLesson = Math.max(0, Math.ceil(data.length / WORDS_PER_LESSON) - 1);
-    const lesson = Math.min(position.lesson, maxLesson);
-    const lessonItems = data.slice(lesson * WORDS_PER_LESSON, (lesson + 1) * WORDS_PER_LESSON);
-    setSelectedLesson(lesson);
-    setStudySession({ ids: lessonItems.map((item) => item.id), label: 'Học tiếp', source: 'lesson', lessonIndex: lesson });
-    setCurrentIndex(Math.min(position.index, Math.max(0, lessonItems.length - 1)));
+    const lessons = getRouteLessons(position.level, store.settings.n4Only);
+    if (lessons.length === 0) return;
+    const lessonIndex = Math.min(position.lesson, lessons.length - 1);
+    const lesson = lessons[lessonIndex];
+    setSelectedLesson(lessonIndex);
+    setStudySession({ ids: lesson.items.map((item) => item.id), label: `${lesson.level} • ${lesson.title}`, source: 'lesson', lessonIndex });
+    setCurrentIndex(Math.min(position.index, Math.max(0, lesson.items.length - 1)));
     setView('study');
   };
 
@@ -252,13 +260,13 @@ export default function Home() {
   if (view === 'home') {
     content = <HomeDashboard {...dashboardStats} streak={store.streak} todayLearned={store.todayActivity.newLearned} lastPosition={store.lastPosition} settings={store.settings} personalSets={store.personalSets} favoriteCount={store.favorites.length} quizHistory={store.quizHistory} hardest={hardestKanji} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onSelectLevel={selectLevel} onContinue={continueLearning} onUpdateSettings={store.updateSettings} onCreateSet={store.createSet} onRenameSet={store.renameSet} onDeleteSet={store.deleteSet} onStartSet={startPersonalSet} onStartFavorites={startFavorites} onExport={exportBackup} onExportCsv={exportCsv} onImport={() => importInputRef.current?.click()} onEnableReminder={enableReminder} />;
   } else if (view === 'lessons') {
-    content = <LessonLibrary level={selectedLevel} levelData={routeData} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
+    content = <LessonLibrary level={selectedLevel} levelData={routeData} lessonGroups={routeLessons} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
   } else if (view === 'quiz' && quizSession) {
     content = <QuizScreen pool={quizSession.pool} level={selectedLevel} mode={quizSession.mode} requestedQuestionCount={quizSession.questionCount} title={quizSession.title} settings={store.settings} onExit={() => { setQuizSession(null); setView('lessons'); }} onComplete={completeQuiz} />;
   } else if (studySession && sessionItems.length > 0) {
     content = <StudyScreen items={sessionItems} currentIndex={currentIndex} sessionLabel={studySession.label} lessonNumber={studySession.lessonIndex === null ? null : studySession.lessonIndex + 1} totalLessons={totalLessons} progress={store.progress} settings={store.settings} favorites={store.favorites} personalSets={store.personalSets} writingScores={store.writingScores} isReview={studySession.source === 'review'} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onBackToLessons={() => setView('lessons')} onHome={() => setView('home')} onSearch={() => setShowSearch(true)} onPrevious={() => moveToIndex(currentIndex - 1)} onNext={nextKanji} onPreviousLesson={() => { if (selectedLesson !== null && selectedLesson > 0) openLesson(selectedLesson - 1); }} onNextLesson={() => { if (selectedLesson !== null && selectedLesson < totalLessons - 1) openLesson(selectedLesson + 1); }} onSelectIndex={moveToIndex} onRate={rateCurrentKanji} onToggleFavorite={store.toggleFavorite} onToggleSet={store.toggleKanjiInSet} onSaveWritingScore={store.saveWritingScore} />;
   } else {
-    content = <LessonLibrary level={selectedLevel} levelData={routeData} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
+    content = <LessonLibrary level={selectedLevel} levelData={routeData} lessonGroups={routeLessons} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
   }
 
   return <>{content}<SearchModal open={showSearch} data={kanjiData} favorites={store.favorites} onClose={() => setShowSearch(false)} onOpenKanji={openSearchResult} onToggleFavorite={store.toggleFavorite} />{notice && <div role="status" className="fixed z-[120] bottom-5 left-1/2 -translate-x-1/2 max-w-[90vw] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-3 rounded-xl shadow-2xl font-bold text-sm"><i className="fas fa-circle-check text-green-400 mr-2"></i>{notice}</div>}<input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => importBackup(event.target.files?.[0])} /></>;

@@ -10,6 +10,7 @@ type LessonFilter = 'all' | 'new' | 'learning' | 'hard' | 'learned' | 'due' | 'f
 type Props = {
   level: JLPTLevel;
   levelData: KanjiInfo[];
+  lessonGroups: { level: JLPTLevel; title: string; items: KanjiInfo[] }[];
   progress: StudyProgress;
   favorites: string[];
   onBack: () => void;
@@ -18,8 +19,6 @@ type Props = {
   onStartReview: (ids: string[]) => void;
   onStartQuiz: (pool: KanjiInfo[], mode: 'practice' | 'exam', questionCount?: number, title?: string) => void;
 };
-
-const WORDS_PER_LESSON = 10;
 
 const filters: { id: LessonFilter; label: string; icon: string }[] = [
   { id: 'all', label: 'Tất cả', icon: 'fa-layer-group' },
@@ -31,15 +30,12 @@ const filters: { id: LessonFilter; label: string; icon: string }[] = [
   { id: 'favorite', label: 'Yêu thích', icon: 'fa-heart' },
 ];
 
-export function LessonLibrary({ level, levelData, progress, favorites, onBack, onSearch, onStartLesson, onStartReview, onStartQuiz }: Props) {
+export function LessonLibrary({ level, levelData, lessonGroups, progress, favorites, onBack, onSearch, onStartLesson, onStartReview, onStartQuiz }: Props) {
   const [filter, setFilter] = useState<LessonFilter>('all');
   const [multiQuizOpen, setMultiQuizOpen] = useState(false);
   const [selectedLessonIndexes, setSelectedLessonIndexes] = useState<number[]>([]);
   const [multiQuizCount, setMultiQuizCount] = useState(20);
-  const lessons = useMemo(() => Array.from({ length: Math.ceil(levelData.length / WORDS_PER_LESSON) }, (_, index) => (
-    levelData.slice(index * WORDS_PER_LESSON, (index + 1) * WORDS_PER_LESSON)
-  )), [levelData]);
-  const selectedPool = useMemo(() => selectedLessonIndexes.flatMap((index) => lessons[index] ?? []), [lessons, selectedLessonIndexes]);
+  const selectedPool = useMemo(() => selectedLessonIndexes.flatMap((index) => lessonGroups[index]?.items ?? []), [lessonGroups, selectedLessonIndexes]);
   const selectedQuestionCount = Math.min(multiQuizCount, Math.max(4, selectedPool.length));
   const dueIds = levelData.filter((item) => isDue(progress[item.id])).map((item) => item.id);
   const learnedTotal = levelData.filter((item) => progress[item.id]?.status === 'learned').length;
@@ -73,7 +69,7 @@ export function LessonLibrary({ level, levelData, progress, favorites, onBack, o
 
   const startMultiQuiz = () => {
     if (selectedLessonIndexes.length < 2 || selectedPool.length < 4) return;
-    onStartQuiz(selectedPool, 'practice', Math.min(selectedQuestionCount, selectedPool.length), `Quiz ${selectedLessonIndexes.length} bài • ${level}`);
+    onStartQuiz(selectedPool, 'practice', Math.min(selectedQuestionCount, selectedPool.length), `Quiz ${selectedLessonIndexes.length} bài theo chủ đề • ${level}`);
   };
 
   return (
@@ -82,7 +78,7 @@ export function LessonLibrary({ level, levelData, progress, favorites, onBack, o
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <button onClick={onBack} aria-label="Về bàn học" className="w-11 h-11 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm"><i className="fas fa-arrow-left"></i></button>
-            <div><h1 className="text-2xl sm:text-3xl font-black">Lộ trình {level}</h1><p className="text-sm text-slate-500 dark:text-slate-400">{levelData.length} chữ • {lessons.length} bài</p></div>
+            <div><h1 className="text-2xl sm:text-3xl font-black">Lộ trình {level}</h1><p className="text-sm text-slate-500 dark:text-slate-400">{levelData.length} chữ • {lessonGroups.length} bài theo chủ đề</p></div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={onSearch} className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold"><i className="fas fa-search mr-2"></i>Tra cứu</button>
@@ -104,7 +100,7 @@ export function LessonLibrary({ level, levelData, progress, favorites, onBack, o
                 <h2 id="multi-quiz-title" className="text-lg font-black text-blue-900 dark:text-blue-100">Chọn các bài muốn làm Quiz</h2>
                 <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">{selectedLessonIndexes.length} bài • {selectedPool.length} chữ đã chọn. Chọn ít nhất 2 bài.</p>
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <button onClick={() => setSelectedLessonIndexes(lessons.map((_, index) => index))} className="px-3 py-2 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 rounded-lg text-sm font-bold">Chọn tất cả</button>
+                  <button onClick={() => setSelectedLessonIndexes(lessonGroups.map((_, index) => index))} className="px-3 py-2 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 rounded-lg text-sm font-bold">Chọn tất cả</button>
                   <button onClick={() => setSelectedLessonIndexes([])} disabled={selectedLessonIndexes.length === 0} className="px-3 py-2 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 disabled:opacity-40 rounded-lg text-sm font-bold">Bỏ chọn</button>
                 </div>
               </div>
@@ -124,7 +120,8 @@ export function LessonLibrary({ level, levelData, progress, favorites, onBack, o
         )}
 
         <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {lessons.map((lesson, index) => {
+          {lessonGroups.map((lessonGroup, index) => {
+            const lesson = lessonGroup.items;
             const filteredItems = lesson.filter(matchesFilter);
             if (filteredItems.length === 0) return null;
             const learned = lesson.filter((item) => progress[item.id]?.status === 'learned').length;
@@ -132,7 +129,17 @@ export function LessonLibrary({ level, levelData, progress, favorites, onBack, o
             const isSelected = selectedLessonIndexes.includes(index);
             return (
               <article key={index} className={`bg-white dark:bg-slate-800 border rounded-2xl p-5 shadow-sm hover:shadow-md transition-all ${isSelected ? 'border-blue-500 ring-2 ring-blue-200 dark:ring-blue-900' : 'border-slate-200 dark:border-slate-700'}`}>
-                <div className="flex justify-between items-start mb-4"><div><h2 className="text-lg font-black">Bài {index + 1}</h2><p className="text-xs text-slate-500 dark:text-slate-400">{learned}/{lesson.length} thuộc {due > 0 && `• ${due} đến hạn`}</p></div>{multiQuizOpen ? <span className={`w-7 h-7 rounded-full flex items-center justify-center border-2 ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 dark:border-slate-600 text-transparent'}`} aria-hidden="true"><i className="fas fa-check text-xs"></i></span> : <span className="text-xs font-bold bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">{filteredItems.length} chữ</span>}</div>
+                <div className="flex justify-between items-start mb-4">
+                  <div>
+                    <h2 className="text-lg font-black">Bài {index + 1}</h2>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] font-black bg-red-50 dark:bg-red-950/40 text-red-600 dark:text-red-300 px-2 py-0.5 rounded-full">{lessonGroup.level}</span>
+                      <p className="text-xs font-bold text-slate-600 dark:text-slate-300">{lessonGroup.title}</p>
+                    </div>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">{learned}/{lesson.length} thuộc {due > 0 && `• ${due} đến hạn`}</p>
+                  </div>
+                  {multiQuizOpen ? <span className={`w-7 h-7 rounded-full flex items-center justify-center border-2 ${isSelected ? 'bg-blue-600 border-blue-600 text-white' : 'border-slate-300 dark:border-slate-600 text-transparent'}`} aria-hidden="true"><i className="fas fa-check text-xs"></i></span> : <span className="text-xs font-bold bg-slate-100 dark:bg-slate-700 px-2 py-1 rounded-full">{filteredItems.length} chữ</span>}
+                </div>
                 <div className="font-japanese text-3xl tracking-wider text-slate-500 dark:text-slate-300 truncate mb-5">{filteredItems.map((item) => item.kanji).join('')}</div>
                 {multiQuizOpen ? (
                   <button onClick={() => toggleLesson(index)} aria-pressed={isSelected} aria-label={`${isSelected ? 'Bỏ chọn' : 'Chọn'} Bài ${index + 1}`} className={`w-full py-2.5 rounded-lg font-bold ${isSelected ? 'bg-blue-600 text-white' : 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'}`}><i className={`fas ${isSelected ? 'fa-check' : 'fa-plus'} mr-2`}></i>{isSelected ? 'Đã chọn' : 'Chọn bài này'}</button>
