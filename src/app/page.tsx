@@ -31,6 +31,7 @@ export default function Home() {
   const [quizWrongAnswers, setQuizWrongAnswers] = useState<typeof kanjiData[0][]>([]);
   const [quizStatus, setQuizStatus] = useState<'idle' | 'answering' | 'answered' | 'finished'>('idle');
   const [selectedOptionIndex, setSelectedOptionIndex] = useState<number | null>(null);
+  const quizTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     const saved = localStorage.getItem('kanjiProgress');
@@ -194,6 +195,7 @@ export default function Home() {
     setQuizStatus('answering');
     setSelectedOptionIndex(null);
     setMode('quiz');
+    if (quizTimeoutRef.current) clearTimeout(quizTimeoutRef.current);
   };
 
   const handleQuizAnswer = (optionIdx: number) => {
@@ -207,7 +209,8 @@ export default function Home() {
     if (isCorrect) {
       setQuizScore(prev => prev + 1);
       // Auto next after 5 seconds to give time to read ON/KUN
-      setTimeout(() => {
+      if (quizTimeoutRef.current) clearTimeout(quizTimeoutRef.current);
+      quizTimeoutRef.current = setTimeout(() => {
         nextQuizQuestion();
       }, 5000);
     } else {
@@ -222,6 +225,10 @@ export default function Home() {
   };
 
   const nextQuizQuestion = () => {
+    if (quizTimeoutRef.current) {
+      clearTimeout(quizTimeoutRef.current);
+      quizTimeoutRef.current = null;
+    }
     setCurrentQuizIndex(prev => {
       const nextIdx = prev + 1;
       if (nextIdx < quizQuestions.length) {
@@ -475,7 +482,7 @@ export default function Home() {
                 <i className="fas fa-redo mr-2"></i> Làm lại
               </button>
               <button 
-                onClick={() => { setMode('learn'); setSelectedLesson(null); setIsQuizSelectionMode(false); setSelectedQuizLessons([]); }}
+                onClick={() => { if (quizTimeoutRef.current) clearTimeout(quizTimeoutRef.current); setMode('learn'); setSelectedLesson(null); setIsQuizSelectionMode(false); setSelectedQuizLessons([]); }}
                 className="bg-slate-800 dark:bg-slate-700 text-white px-6 py-3 rounded-xl font-bold hover:bg-slate-700 dark:hover:bg-slate-600 transition-colors"
               >
                 Về Lộ trình
@@ -496,7 +503,7 @@ export default function Home() {
     return (
       <div className="min-h-screen bg-slate-50 dark:bg-slate-900 p-4 sm:p-8 font-sans flex flex-col items-center">
         <div className="w-full max-w-3xl flex justify-between items-center mb-8">
-          <button onClick={() => { setMode('learn'); setSelectedLesson(null); setIsQuizSelectionMode(false); setSelectedQuizLessons([]); }} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:bg-slate-700 transition-colors">
+          <button onClick={() => { if (quizTimeoutRef.current) clearTimeout(quizTimeoutRef.current); setMode('learn'); setSelectedLesson(null); setIsQuizSelectionMode(false); setSelectedQuizLessons([]); }} className="w-10 h-10 flex items-center justify-center bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:bg-slate-700 transition-colors">
             <i className="fas fa-times text-slate-600 dark:text-slate-300"></i>
           </button>
           <div className="bg-white dark:bg-slate-800 px-4 py-2 rounded-full font-bold text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 shadow-sm">
