@@ -16,7 +16,7 @@ import { isDue, type PersonalSet, type ReviewQuality } from '@/lib/study';
 type AppView = 'home' | 'lessons' | 'study' | 'quiz';
 type StudySource = 'lesson' | 'review' | 'favorites' | 'personal' | 'search' | 'filtered';
 type StudySession = { ids: string[]; label: string; source: StudySource; lessonIndex: number | null };
-type QuizSession = { pool: KanjiInfo[]; mode: 'practice' | 'exam' };
+type QuizSession = { pool: KanjiInfo[]; mode: 'practice' | 'exam'; questionCount?: number; title?: string };
 
 const WORDS_PER_LESSON = 10;
 const kanjiById = new Map(kanjiData.map((item) => [item.id, item]));
@@ -176,12 +176,12 @@ export default function Home() {
     nextKanji();
   };
 
-  const startQuiz = (pool: KanjiInfo[], mode: 'practice' | 'exam') => {
+  const startQuiz = (pool: KanjiInfo[], mode: 'practice' | 'exam', questionCount?: number, title?: string) => {
     if (pool.length < 4) {
       setNotice('Cần ít nhất 4 chữ Kanji để tạo Quiz.');
       return;
     }
-    setQuizSession({ pool, mode });
+    setQuizSession({ pool, mode, questionCount, title });
     setView('quiz');
   };
 
@@ -254,7 +254,7 @@ export default function Home() {
   } else if (view === 'lessons') {
     content = <LessonLibrary level={selectedLevel} levelData={routeData} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
   } else if (view === 'quiz' && quizSession) {
-    content = <QuizScreen pool={quizSession.pool} level={selectedLevel} mode={quizSession.mode} settings={store.settings} onExit={() => { setQuizSession(null); setView('lessons'); }} onComplete={completeQuiz} />;
+    content = <QuizScreen pool={quizSession.pool} level={selectedLevel} mode={quizSession.mode} requestedQuestionCount={quizSession.questionCount} title={quizSession.title} settings={store.settings} onExit={() => { setQuizSession(null); setView('lessons'); }} onComplete={completeQuiz} />;
   } else if (studySession && sessionItems.length > 0) {
     content = <StudyScreen items={sessionItems} currentIndex={currentIndex} sessionLabel={studySession.label} lessonNumber={studySession.lessonIndex === null ? null : studySession.lessonIndex + 1} totalLessons={totalLessons} progress={store.progress} settings={store.settings} favorites={store.favorites} personalSets={store.personalSets} writingScores={store.writingScores} isReview={studySession.source === 'review'} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onBackToLessons={() => setView('lessons')} onHome={() => setView('home')} onSearch={() => setShowSearch(true)} onPrevious={() => moveToIndex(currentIndex - 1)} onNext={nextKanji} onPreviousLesson={() => { if (selectedLesson !== null && selectedLesson > 0) openLesson(selectedLesson - 1); }} onNextLesson={() => { if (selectedLesson !== null && selectedLesson < totalLessons - 1) openLesson(selectedLesson + 1); }} onSelectIndex={moveToIndex} onRate={rateCurrentKanji} onToggleFavorite={store.toggleFavorite} onToggleSet={store.toggleKanjiInSet} onSaveWritingScore={store.saveWritingScore} />;
   } else {
