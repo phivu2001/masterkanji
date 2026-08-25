@@ -581,6 +581,24 @@ export default function Home() {
     );
   }
 
+  const previousLesson = () => {
+    if (selectedLesson !== null && selectedLesson > 0) {
+      setSelectedLesson(selectedLesson - 1);
+      setCurrentIndex(0);
+      setMode('learn');
+      setIsFlipped(false);
+    }
+  };
+
+  const nextLesson = () => {
+    if (selectedLesson !== null && selectedLesson < totalLessons - 1) {
+      setSelectedLesson(selectedLesson + 1);
+      setCurrentIndex(0);
+      setMode('learn');
+      setIsFlipped(false);
+    }
+  };
+
   return (
     <div className="bg-slate-100 dark:bg-slate-700 text-slate-800 dark:text-slate-100 font-sans min-h-screen">
 
@@ -617,14 +635,40 @@ export default function Home() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full">
         {/* Header Section */}
         <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-end gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded text-xs font-bold uppercase">Bài {selectedLesson! + 1}</span>
-              <h1 className="text-2xl font-bold text-slate-900 dark:text-white">
-                {mode === 'learn' ? `Học bài mới` : mode === 'list' ? `Danh sách Kanji` : 'Chế độ: Ôn tập Flashcard'}
-              </h1>
+          <div className="flex flex-col lg:flex-row lg:items-end gap-4">
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-800 p-2 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm w-max">
+              <button 
+                onClick={() => setSelectedLesson(null)} 
+                className="w-10 h-10 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-400 transition-colors"
+                title="Quay lại mục lục các bài"
+              >
+                <i className="fas fa-list-ul"></i>
+              </button>
+              <div className="w-px h-6 bg-slate-200 dark:bg-slate-700"></div>
+              <button 
+                onClick={previousLesson} 
+                disabled={selectedLesson === 0}
+                className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${selectedLesson === 0 ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'}`}
+                title="Bài trước"
+              >
+                <i className="fas fa-chevron-left"></i>
+              </button>
+              
+              <div className="flex flex-col items-center px-4 min-w-[140px]">
+                <span className="text-[10px] font-bold text-red-500 uppercase tracking-wider mb-0.5">Bài {selectedLesson! + 1}</span>
+                <span className="font-bold text-sm text-slate-800 dark:text-slate-100 whitespace-nowrap">{mode === 'learn' ? `Học bài mới` : mode === 'list' ? `Danh sách Kanji` : 'Ôn tập Flashcard'}</span>
+              </div>
+              
+              <button 
+                onClick={nextLesson} 
+                disabled={selectedLesson === totalLessons - 1}
+                className={`w-10 h-10 flex items-center justify-center rounded-lg transition-colors ${selectedLesson === totalLessons - 1 ? 'opacity-30 cursor-not-allowed' : 'hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300'}`}
+                title="Bài tiếp theo"
+              >
+                <i className="fas fa-chevron-right"></i>
+              </button>
             </div>
-            <p className="text-slate-500 dark:text-slate-400 dark:text-slate-500">Mục tiêu bài này: {total} chữ • Đã học: {currentIndex + 1}/{total}</p>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Mục tiêu bài này: {total} chữ • Đang xem: {currentIndex + 1}/{total}</p>
           </div>
           <div className="flex gap-2 w-full sm:w-auto">
             <button onClick={() => setMode(mode === 'list' ? 'learn' : 'list')} className="flex-1 sm:flex-none bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg shadow-sm hover:bg-slate-50 dark:bg-slate-900 font-medium transition-colors">
