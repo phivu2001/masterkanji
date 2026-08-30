@@ -21,6 +21,7 @@ import {
 
 const STORAGE = {
   progress: 'kanjiProgress',
+  vocabularyProgress: 'vocabularyProgress',
   settings: 'kanjiSettingsV2',
   favorites: 'kanjiFavorites',
   sets: 'kanjiPersonalSets',
@@ -53,6 +54,7 @@ const persist = (key: string, value: unknown) => {
 export function useStudyStore() {
   const [hydrated, setHydrated] = useState(false);
   const [progress, setProgress] = useState<StudyProgress>({});
+  const [vocabularyProgress, setVocabularyProgress] = useState<StudyProgress>({});
   const [settings, setSettings] = useState<StudySettings>(DEFAULT_SETTINGS);
   const [favorites, setFavorites] = useState<string[]>([]);
   const [personalSets, setPersonalSets] = useState<PersonalSet[]>([DEFAULT_SET]);
@@ -63,6 +65,7 @@ export function useStudyStore() {
 
   const loadFromStorage = useCallback(() => {
     setProgress(normalizeProgress(readJson<unknown>(STORAGE.progress, {})));
+    setVocabularyProgress(normalizeProgress(readJson<unknown>(STORAGE.vocabularyProgress, {})));
     setSettings({ ...DEFAULT_SETTINGS, ...readJson<Partial<StudySettings>>(STORAGE.settings, {}) });
     setFavorites(readJson<string[]>(STORAGE.favorites, []));
     const storedSets = readJson<PersonalSet[]>(STORAGE.sets, []);
@@ -121,6 +124,16 @@ export function useStudyStore() {
     });
     announceChange();
   }, [announceChange, progress]);
+
+  const reviewVocabulary = useCallback((id: string, quality: ReviewQuality) => {
+    const now = new Date();
+    setVocabularyProgress((current) => {
+      const updated = { ...current, [id]: scheduleReview(current[id], quality, now) };
+      persist(STORAGE.vocabularyProgress, updated);
+      return updated;
+    });
+    announceChange();
+  }, [announceChange]);
 
   const updateSettings = useCallback((patch: Partial<StudySettings>) => {
     setSettings((current) => {
@@ -232,6 +245,7 @@ export function useStudyStore() {
     version: 2,
     exportedAt: new Date().toISOString(),
     progress,
+    vocabularyProgress,
     settings,
     favorites,
     personalSets,
@@ -239,13 +253,15 @@ export function useStudyStore() {
     lastPosition,
     writingScores,
     quizHistory,
-  }), [activity, favorites, lastPosition, personalSets, progress, quizHistory, settings, writingScores]);
+  }), [activity, favorites, lastPosition, personalSets, progress, quizHistory, settings, vocabularyProgress, writingScores]);
 
   const restoreBackup = useCallback((value: unknown) => {
     if (!isStudyBackup(value)) throw new Error('Tệp sao lưu không đúng định dạng KanjiMaster phiên bản 2.');
     const restoredProgress = normalizeProgress(value.progress);
+    const restoredVocabularyProgress = normalizeProgress(value.vocabularyProgress ?? {});
     const restoredSettings = { ...DEFAULT_SETTINGS, ...value.settings };
     setProgress(restoredProgress);
+    setVocabularyProgress(restoredVocabularyProgress);
     setSettings(restoredSettings);
     setFavorites(value.favorites);
     setPersonalSets(value.personalSets.length > 0 ? value.personalSets : [DEFAULT_SET]);
@@ -254,6 +270,7 @@ export function useStudyStore() {
     setWritingScores(value.writingScores ?? {});
     setQuizHistory(value.quizHistory ?? []);
     persist(STORAGE.progress, restoredProgress);
+    persist(STORAGE.vocabularyProgress, restoredVocabularyProgress);
     persist(STORAGE.settings, restoredSettings);
     persist(STORAGE.favorites, value.favorites);
     persist(STORAGE.sets, value.personalSets.length > 0 ? value.personalSets : [DEFAULT_SET]);
@@ -270,6 +287,7 @@ export function useStudyStore() {
   return {
     hydrated,
     progress,
+    vocabularyProgress,
     settings,
     favorites,
     personalSets,
@@ -280,6 +298,7 @@ export function useStudyStore() {
     writingScores,
     quizHistory,
     reviewKanji,
+    reviewVocabulary,
     updateSettings,
     toggleFavorite,
     createSet,

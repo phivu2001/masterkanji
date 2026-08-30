@@ -65,6 +65,7 @@ export type QuizHistoryItem = {
   score: number;
   total: number;
   mode: 'practice' | 'exam';
+  scope?: 'kanji' | 'vocabulary';
   completedAt: string;
 };
 
@@ -72,6 +73,7 @@ export type StudyBackup = {
   version: 2;
   exportedAt: string;
   progress: StudyProgress;
+  vocabularyProgress?: StudyProgress;
   settings: StudySettings;
   favorites: string[];
   personalSets: PersonalSet[];

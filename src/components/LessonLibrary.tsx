@@ -15,6 +15,7 @@ type Props = {
   favorites: string[];
   onBack: () => void;
   onSearch: () => void;
+  onOpenVocabulary: () => void;
   onStartLesson: (lessonIndex: number, ids?: string[]) => void;
   onStartReview: (ids: string[]) => void;
   onStartQuiz: (pool: KanjiInfo[], mode: 'practice' | 'exam', questionCount?: number, title?: string) => void;
@@ -30,7 +31,7 @@ const filters: { id: LessonFilter; label: string; icon: string }[] = [
   { id: 'favorite', label: 'Yêu thích', icon: 'fa-heart' },
 ];
 
-export function LessonLibrary({ level, levelData, lessonGroups, progress, favorites, onBack, onSearch, onStartLesson, onStartReview, onStartQuiz }: Props) {
+export function LessonLibrary({ level, levelData, lessonGroups, progress, favorites, onBack, onSearch, onOpenVocabulary, onStartLesson, onStartReview, onStartQuiz }: Props) {
   const [filter, setFilter] = useState<LessonFilter>('all');
   const [multiQuizOpen, setMultiQuizOpen] = useState(false);
   const [selectedLessonIndexes, setSelectedLessonIndexes] = useState<number[]>([]);
@@ -82,6 +83,7 @@ export function LessonLibrary({ level, levelData, lessonGroups, progress, favori
           </div>
           <div className="flex flex-wrap gap-2">
             <button onClick={onSearch} className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl font-bold"><i className="fas fa-search mr-2"></i>Tra cứu</button>
+            <button onClick={onOpenVocabulary} className="px-4 py-2 bg-emerald-500 text-white rounded-xl font-bold"><i className="fas fa-language mr-2"></i>Từ vựng</button>
             <button disabled={dueIds.length === 0} onClick={() => onStartReview(dueIds)} className="px-4 py-2 bg-orange-500 text-white disabled:opacity-40 rounded-xl font-bold"><i className="fas fa-bell mr-2"></i>Ôn đến hạn ({dueIds.length})</button>
             <button onClick={multiQuizOpen ? closeMultiQuiz : openMultiQuiz} aria-pressed={multiQuizOpen} className={`px-4 py-2 rounded-xl font-bold ${multiQuizOpen ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-blue-600 text-white'}`}><i className={`fas ${multiQuizOpen ? 'fa-xmark' : 'fa-layer-group'} mr-2`}></i>{multiQuizOpen ? 'Hủy chọn bài' : 'Quiz nhiều bài'}</button>
             <button onClick={() => onStartQuiz(levelData, 'exam')} className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-bold"><i className="fas fa-stopwatch mr-2"></i>Thi thử</button>

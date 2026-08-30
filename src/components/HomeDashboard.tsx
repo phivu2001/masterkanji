@@ -16,11 +16,13 @@ type Props = {
   settings: StudySettings;
   personalSets: PersonalSet[];
   favoriteCount: number;
+  vocabularyCounts: { n5: number; n4: number; n5Learned: number; n5Due: number; n4Learned: number; n4Due: number };
   quizHistory: QuizHistoryItem[];
   hardest: { id: string; kanji: string; hanviet: string; incorrect: number }[];
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   onSelectLevel: (level: JLPTLevel) => void;
+  onSelectVocabulary: (level: JLPTLevel) => void;
   onContinue: () => void;
   onUpdateSettings: (patch: Partial<StudySettings>) => void;
   onCreateSet: (name: string) => void;
@@ -113,6 +115,18 @@ export function HomeDashboard(props: Props) {
               <div className="flex justify-between items-start"><div><div className="text-4xl text-blue-500 font-black">N4</div><div className="font-bold text-lg">Kanji sơ trung cấp</div></div><span className="bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 px-3 py-1 rounded-full text-sm font-bold">{props.settings.n4Only ? '167 chữ' : '247 chữ'}</span></div>
             </button>
           </div>
+          <div className="mt-5 mb-2 flex items-center gap-2 text-sm font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500">
+            <i className="fas fa-book-open text-emerald-500"></i>
+            Vocabulary
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button onClick={() => props.onSelectVocabulary('N5')} className="text-left bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-emerald-500 rounded-2xl p-6 transition-all shadow-sm">
+              <div className="flex justify-between items-start"><div><div className="text-4xl text-emerald-500 font-black">語</div><div className="font-bold text-lg">Vocabulary N5</div><div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{props.vocabularyCounts.n5Learned} từ đã thuộc • {props.vocabularyCounts.n5Due} đến hạn</div></div><span className="bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300 px-3 py-1 rounded-full text-sm font-bold">{props.vocabularyCounts.n5} từ</span></div>
+            </button>
+            <button onClick={() => props.onSelectVocabulary('N4')} className="text-left bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-cyan-500 rounded-2xl p-6 transition-all shadow-sm">
+              <div className="flex justify-between items-start"><div><div className="text-4xl text-cyan-500 font-black">語</div><div className="font-bold text-lg">Vocabulary N4</div><div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{props.vocabularyCounts.n4Learned} từ đã thuộc • {props.vocabularyCounts.n4Due} đến hạn</div></div><span className="bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-300 px-3 py-1 rounded-full text-sm font-bold">{props.vocabularyCounts.n4} từ</span></div>
+            </button>
+          </div>
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
@@ -155,7 +169,7 @@ export function HomeDashboard(props: Props) {
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><h2 className="font-black text-lg mb-3">Kanji sai nhiều nhất</h2>{props.hardest.length > 0 ? <div className="space-y-2">{props.hardest.map((item) => <div key={item.id} className="flex items-center justify-between bg-slate-50 dark:bg-slate-900 rounded-xl p-3"><div className="flex items-center gap-3"><span className="font-japanese text-3xl">{item.kanji}</span><span className="font-bold uppercase">{item.hanviet}</span></div><span className="text-red-500 font-bold">{item.incorrect} lần sai</span></div>)}</div> : <p className="text-sm text-slate-500 dark:text-slate-400">Chưa có lỗi nào được ghi nhận.</p>}</div>
-          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><h2 className="font-black text-lg mb-3">Kết quả gần đây</h2>{props.quizHistory.length > 0 ? <div className="space-y-2">{props.quizHistory.slice(0, 3).map((item) => <div key={item.id} className="bg-slate-50 dark:bg-slate-900 rounded-xl p-3 flex justify-between"><div><div className="font-bold">{item.level} • {item.mode === 'exam' ? 'Thi thử' : 'Luyện tập'}</div><div className="text-xs text-slate-400">{new Date(item.completedAt).toLocaleDateString('vi-VN')}</div></div><div className="text-xl font-black text-red-500">{item.score}/{item.total}</div></div>)}</div> : <p className="text-sm text-slate-500 dark:text-slate-400">Chưa có bài Quiz nào.</p>}</div>
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><h2 className="font-black text-lg mb-3">Kết quả gần đây</h2>{props.quizHistory.length > 0 ? <div className="space-y-2">{props.quizHistory.slice(0, 3).map((item) => <div key={item.id} className="bg-slate-50 dark:bg-slate-900 rounded-xl p-3 flex justify-between"><div><div className="font-bold">{item.level} • {item.scope === 'vocabulary' ? 'Từ vựng' : item.mode === 'exam' ? 'Thi thử' : 'Luyện tập'}</div><div className="text-xs text-slate-400">{new Date(item.completedAt).toLocaleDateString('vi-VN')}</div></div><div className="text-xl font-black text-red-500">{item.score}/{item.total}</div></div>)}</div> : <p className="text-sm text-slate-500 dark:text-slate-400">Chưa có bài Quiz nào.</p>}</div>
         </section>
       </div>
     </div>
