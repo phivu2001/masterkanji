@@ -7,8 +7,11 @@ import { QuizScreen } from '@/components/QuizScreen';
 import { SearchModal } from '@/components/SearchModal';
 import { StudyScreen } from '@/components/StudyScreen';
 import { VocabularyLibrary } from '@/components/VocabularyLibrary';
+import { VocabularyClozeScreen } from '@/components/VocabularyClozeScreen';
+import { VocabularyGameScreen } from '@/components/VocabularyGameScreen';
 import { VocabularyQuizScreen } from '@/components/VocabularyQuizScreen';
 import { VocabularyStudyScreen } from '@/components/VocabularyStudyScreen';
+import { VocabularyTypingScreen } from '@/components/VocabularyTypingScreen';
 import { kanjiData } from '@/data/kanji';
 import type { KanjiInfo } from '@/data/kanji';
 import { getJlptLessons, getJlptStudyOrder } from '@/data/jlptCore';
@@ -18,13 +21,14 @@ import type { LearningVocabularyPartOfSpeech, VocabularyInfo } from '@/data/voca
 import { useStudyStore } from '@/hooks/useStudyStore';
 import { isDue, type PersonalSet, type ReviewQuality } from '@/lib/study';
 
-type AppView = 'home' | 'lessons' | 'study' | 'quiz' | 'vocabulary' | 'vocabularyStudy' | 'vocabularyQuiz';
+type AppView = 'home' | 'lessons' | 'study' | 'quiz' | 'vocabulary' | 'vocabularyStudy' | 'vocabularyQuiz' | 'vocabularyTyping' | 'vocabularyCloze' | 'vocabularyGame';
 type StudySource = 'lesson' | 'review' | 'favorites' | 'personal' | 'search' | 'filtered';
 type StudySession = { ids: string[]; label: string; source: StudySource; lessonIndex: number | null };
 type QuizSession = { pool: KanjiInfo[]; mode: 'practice' | 'exam'; questionCount?: number; title?: string };
 type VocabularyStudySource = 'lesson' | 'review' | 'filtered';
 type VocabularyStudySession = { ids: string[]; label: string; source: VocabularyStudySource; lessonIndex: number | null };
 type VocabularyQuizSession = { pool: VocabularyInfo[]; mode: 'practice' | 'rapid' | 'exam'; questionCount?: number; title?: string };
+type VocabularyActivitySession = { pool: VocabularyInfo[]; title: string; mode: 'typing' | 'cloze' | 'speed' | 'relations' };
 type RouteLesson = { level: JLPTLevel; title: string; items: KanjiInfo[] };
 
 const kanjiById = new Map(kanjiData.map((item) => [item.id, item]));
@@ -51,6 +55,7 @@ export default function Home() {
   const [vocabularyStudySession, setVocabularyStudySession] = useState<VocabularyStudySession | null>(null);
   const [vocabularyIndex, setVocabularyIndex] = useState(0);
   const [vocabularyQuizSession, setVocabularyQuizSession] = useState<VocabularyQuizSession | null>(null);
+  const [vocabularyActivitySession, setVocabularyActivitySession] = useState<VocabularyActivitySession | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notice, setNotice] = useState('');
@@ -336,6 +341,26 @@ export default function Home() {
     result.wrongIds.forEach((id) => store.reviewVocabulary(id, 'again'));
   };
 
+  const startVocabularyActivity = (pool: VocabularyInfo[], mode: VocabularyActivitySession['mode'], title: string) => {
+    const minimum = mode === 'speed' ? 4 : 1;
+    if (pool.length < minimum) {
+      setNotice(`Cần ít nhất ${minimum} từ để bắt đầu chế độ này.`);
+      return;
+    }
+    setVocabularyActivitySession({ pool, mode, title });
+    setView(mode === 'typing' ? 'vocabularyTyping' : mode === 'cloze' ? 'vocabularyCloze' : 'vocabularyGame');
+  };
+
+  const completeVocabularyActivity = (result: { score: number; total: number; wrongIds: string[] }) => {
+    store.addQuizHistory({ level: selectedLevel, score: result.score, total: result.total, mode: 'practice', scope: 'vocabulary' });
+    result.wrongIds.forEach((id) => store.reviewVocabulary(id, 'again'));
+  };
+
+  const exitVocabularyActivity = () => {
+    setVocabularyActivitySession(null);
+    setView('vocabulary');
+  };
+
   const openSearchResult = (item: KanjiInfo) => {
     setSelectedLevel(item.level);
     setStudySession({ ids: [item.id], label: item.isSupplemental ? 'Kanji mở rộng' : 'Kết quả tra cứu', source: 'search', lessonIndex: null });
@@ -402,9 +427,15 @@ export default function Home() {
   } else if (view === 'quiz' && quizSession) {
     content = <QuizScreen pool={quizSession.pool} level={selectedLevel} mode={quizSession.mode} requestedQuestionCount={quizSession.questionCount} title={quizSession.title} settings={store.settings} onExit={() => { setQuizSession(null); setView('lessons'); }} onComplete={completeQuiz} />;
   } else if (view === 'vocabulary') {
-    content = <VocabularyLibrary level={selectedLevel} words={vocabularyRouteData} lessonGroups={vocabularyLessons} partOfSpeech={selectedVocabularyPartOfSpeech} progress={store.vocabularyProgress} onBack={() => setView('home')} onStartLesson={openVocabularyLesson} onStartReview={startVocabularyReview} onStartQuiz={startVocabularyQuiz} />;
+    content = <VocabularyLibrary level={selectedLevel} words={vocabularyRouteData} lessonGroups={vocabularyLessons} partOfSpeech={selectedVocabularyPartOfSpeech} progress={store.vocabularyProgress} onBack={() => setView('home')} onStartLesson={openVocabularyLesson} onStartReview={startVocabularyReview} onStartQuiz={startVocabularyQuiz} onStartTyping={(pool, title) => startVocabularyActivity(pool, 'typing', title)} onStartCloze={(pool, title) => startVocabularyActivity(pool, 'cloze', title)} onStartGame={(pool, mode, title) => startVocabularyActivity(pool, mode, title)} />;
   } else if (view === 'vocabularyQuiz' && vocabularyQuizSession) {
     content = <VocabularyQuizScreen pool={vocabularyQuizSession.pool} level={selectedLevel} mode={vocabularyQuizSession.mode} requestedQuestionCount={vocabularyQuizSession.questionCount} title={vocabularyQuizSession.title} settings={store.settings} onExit={() => { setVocabularyQuizSession(null); setView('vocabulary'); }} onComplete={completeVocabularyQuiz} />;
+  } else if (view === 'vocabularyTyping' && vocabularyActivitySession?.mode === 'typing') {
+    content = <VocabularyTypingScreen pool={vocabularyActivitySession.pool} level={selectedLevel} title={vocabularyActivitySession.title} settings={store.settings} onExit={exitVocabularyActivity} onComplete={completeVocabularyActivity} />;
+  } else if (view === 'vocabularyCloze' && vocabularyActivitySession?.mode === 'cloze') {
+    content = <VocabularyClozeScreen pool={vocabularyActivitySession.pool} level={selectedLevel} title={vocabularyActivitySession.title} onExit={exitVocabularyActivity} onComplete={completeVocabularyActivity} />;
+  } else if (view === 'vocabularyGame' && (vocabularyActivitySession?.mode === 'speed' || vocabularyActivitySession?.mode === 'relations')) {
+    content = <VocabularyGameScreen pool={vocabularyActivitySession.pool} level={selectedLevel} mode={vocabularyActivitySession.mode} title={vocabularyActivitySession.title} onExit={exitVocabularyActivity} />;
   } else if (view === 'vocabularyStudy' && vocabularyStudySession && vocabularySessionItems.length > 0) {
     content = <VocabularyStudyScreen items={vocabularySessionItems} currentIndex={vocabularyIndex} sessionLabel={vocabularyStudySession.label} lessonNumber={vocabularyStudySession.lessonIndex === null ? null : vocabularyLessons[vocabularyStudySession.lessonIndex]?.lessonNumber ?? null} lessonPosition={vocabularyStudySession.lessonIndex === null ? null : vocabularyStudySession.lessonIndex + 1} totalLessons={vocabularyLessons.length} progress={store.vocabularyProgress} settings={store.settings} isReview={vocabularyStudySession.source === 'review'} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onBackToLibrary={() => setView('vocabulary')} onHome={() => setView('home')} onPrevious={() => moveToVocabularyIndex(vocabularyIndex - 1)} onNext={nextVocabulary} onPreviousLesson={() => { if (selectedVocabularyLesson !== null && selectedVocabularyLesson > 0) openVocabularyLesson(selectedVocabularyLesson - 1); }} onNextLesson={() => { if (selectedVocabularyLesson !== null && selectedVocabularyLesson < vocabularyLessons.length - 1) openVocabularyLesson(selectedVocabularyLesson + 1); }} onSelectIndex={moveToVocabularyIndex} onRate={rateCurrentVocabulary} />;
   } else if (studySession && sessionItems.length > 0) {
