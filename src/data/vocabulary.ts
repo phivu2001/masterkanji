@@ -1,5 +1,6 @@
 import { kanjiData } from './kanji';
 import type { JLPTLevel } from './jlptCore';
+import { rawMinnaN4Vocabulary } from './vocabularyN4';
 
 export type VocabularyKanjiReference = {
   id: string;
@@ -16,18 +17,23 @@ export type VocabularyContext = {
   hint: string;
 };
 
+export type VocabularyPartOfSpeech = 'verb' | 'noun' | 'adjective' | 'other';
+export type LearningVocabularyPartOfSpeech = Exclude<VocabularyPartOfSpeech, 'other'>;
+
 export type VocabularyInfo = {
   id: string;
   word: string;
   reading: string;
   meaning: string;
   level: JLPTLevel;
+  partOfSpeech: VocabularyPartOfSpeech;
   relatedKanji: VocabularyKanjiReference[];
   contexts: VocabularyContext[];
 };
 
 export type VocabularyLessonGroup = {
   level: JLPTLevel;
+  lessonNumber: number;
   title: string;
   words: VocabularyInfo[];
 };
@@ -46,6 +52,10 @@ type RawVocabularyInfo = {
  */
 const minnaN5LessonTitles = Array.from({ length: 25 }, (_, index) => (
   `Minna no Nihongo I - Bài ${String(index + 1).padStart(2, '0')}`
+));
+
+const minnaN4LessonTitles = Array.from({ length: 25 }, (_, index) => (
+  `Minna no Nihongo II - Bài ${String(index + 26).padStart(2, '0')}`
 ));
 
 const rawMinnaN5Vocabulary = [
@@ -6411,16 +6421,51 @@ const questionStarters = [
   'なに', 'なん', 'いくら', 'いくつ', 'どんな',
 ];
 
-const createVocabularyContexts = (item: RawVocabularyInfo): VocabularyContext[] => {
+const naAdjectiveWords = new Set([
+  'ハンサム', 'きれい', '静か', 'にぎやか', '有名', '親切', '元気', '暇', '便利',
+  'すてき', '好き', '嫌い', '上手', '下手', '簡単な', '大切', '大丈夫', '無理',
+  '心配', '大好き', '不思議', 'まじめ', '熱心', '嫌', '十分', 'だめ', '必要',
+  '特別', '豪華', '複雑', '邪魔', '伝統的', '真っ白', '丈夫', '変', '幸せ',
+  '楽', '安全', '危険', '安心',
+]);
+
+const nonAdjectiveIWords = new Set([
+  'はい', 'おととい', 'いらっしゃい', 'だいたい', '～ぐらい', 'どのくらい',
+  '行っていらっしゃい', 'お帰りなさい',
+]);
+
+const fixedExpressionWords = new Set([
+  '～から来ました', 'これからお世話になります', 'すみません', 'ありがとうございました',
+  'わかりました', 'しつれいします', 'いただきます', 'そろそろ失礼します',
+  'また今度お願いします', 'かしこまりました', '行ってきます', 'お願いします',
+  '疲れました', 'そうしましょう', '～でございます', 'これでお願いします',
+  'お世話になりました',
+]);
+
+const nonNounMeaningPattern = /^(vâng|dạ|không|xin|chào|cảm ơn|cám ơn|mời|rất|hơi|thường|hay |thỉnh thoảng|luôn|đôi khi|sắp|dần|đã |chưa|vẫn|lại |cùng|ngay|một chút|một ít|khoảng|hơn |nhất|thế nào|tại sao|ở đâu|ai |ai$|cái nào|như thế nào|vì |nhưng|và |hoặc|sau đó|trước hết|tiếp theo|được chứ|không sao|thật |ôi|a-lô|ừ|à|tự |ngoài ra)/i;
+
+const getVocabularyPartOfSpeech = (item: RawVocabularyInfo): VocabularyPartOfSpeech => {
   const { word, reading, meaning } = item;
   const isFragment = /[～―－]/.test(word) || /[～―－]/.test(reading);
-  const isFixedExpression = /[。？！?]|です|ます|ました|ません|ましょう|ください|なさい/.test(word);
-  const isVerb = /(?:ます|ました|ません|ましょう)$/.test(word);
+  const isFixedExpression = fixedExpressionWords.has(word)
+    || /[。？！?]/.test(word)
+    || /(?:ください|なさい|ですか|ですね|ですよ)$/.test(word);
+
+  if (!isFixedExpression && /(?:ます|ました|ません|ましょう)$/.test(word)) return 'verb';
+  if (naAdjectiveWords.has(word)) return 'adjective';
+  if (!isFixedExpression && !nonAdjectiveIWords.has(word) && /い$/.test(word)) return 'adjective';
+  if (isFragment || isFixedExpression || questionStarters.some((starter) => word.startsWith(starter) || reading.startsWith(starter)) || nonNounMeaningPattern.test(meaning.trim())) return 'other';
+  return 'noun';
+};
+
+const createVocabularyContexts = (item: RawVocabularyInfo, partOfSpeech: VocabularyPartOfSpeech): VocabularyContext[] => {
+  const { word, reading, meaning } = item;
+  const isFragment = /[～―－]/.test(word) || /[～―－]/.test(reading);
+  const isFixedExpression = fixedExpressionWords.has(word) || /[。？！?]|です|ください|なさい/.test(word);
   const isQuestion = questionStarters.some((starter) => word.startsWith(starter) || reading.startsWith(starter));
   const isPerson = includesAny(meaning, personMeaningHints);
   const isPlace = includesAny(meaning, placeMeaningHints);
   const isTime = includesAny(meaning, timeMeaningHints);
-  const isIAdjective = /い$/.test(word) && !isFixedExpression;
 
   const contexts: VocabularyContext[] = [{
     title: 'Cụm gốc',
@@ -6452,7 +6497,7 @@ const createVocabularyContexts = (item: RawVocabularyInfo): VocabularyContext[] 
     return contexts;
   }
 
-  if (isFixedExpression) {
+  if (partOfSpeech === 'other' && isFixedExpression) {
     contexts.push({
       title: 'Câu giao tiếp',
       phrase: word,
@@ -6463,7 +6508,7 @@ const createVocabularyContexts = (item: RawVocabularyInfo): VocabularyContext[] 
     return contexts;
   }
 
-  if (isVerb) {
+  if (partOfSpeech === 'verb') {
     contexts.push({
       title: 'Cụm hành động',
       phrase: `よく${word}。`,
@@ -6481,13 +6526,24 @@ const createVocabularyContexts = (item: RawVocabularyInfo): VocabularyContext[] 
     return contexts;
   }
 
-  if (isIAdjective) {
+  if (partOfSpeech === 'adjective') {
     contexts.push({
       title: 'Mô tả nhanh',
       phrase: `${word}です。`,
       reading: `${reading}です。`,
       meaning: `Thật ${lowerFirst(meaning)}.`,
       hint: 'Tính từ dễ nhớ hơn khi học như một nhận xét ngắn: “...です”.',
+    });
+    return contexts;
+  }
+
+  if (partOfSpeech === 'other') {
+    contexts.push({
+      title: 'Cách dùng',
+      phrase: word,
+      reading,
+      meaning,
+      hint: 'Học mục này như một trạng từ, từ nối hoặc cụm giao tiếp hoàn chỉnh trong tình huống phù hợp.',
     });
     return contexts;
   }
@@ -6535,36 +6591,67 @@ const createVocabularyContexts = (item: RawVocabularyInfo): VocabularyContext[] 
   return contexts;
 };
 
-const vocabularyWithLesson = rawMinnaN5Vocabulary.map((item, index) => ({
-  lesson: item.lesson,
-  word: {
-    id: `minna-n5-${String(item.lesson).padStart(2, '0')}-${String(index + 1).padStart(3, '0')}`,
-    word: item.word,
-    reading: item.reading,
-    meaning: item.meaning,
-    level: 'N5',
-    relatedKanji: getRelatedKanji(item.word),
-    contexts: createVocabularyContexts(item),
-  } satisfies VocabularyInfo,
-}));
+const createVocabularyWithLesson = (
+  items: readonly RawVocabularyInfo[],
+  level: JLPTLevel,
+  idPrefix: string,
+  idWidth: number,
+) => items.map((item, index) => {
+  const partOfSpeech = getVocabularyPartOfSpeech(item);
+  return {
+    lesson: item.lesson,
+    word: {
+      id: `${idPrefix}-${String(item.lesson).padStart(2, '0')}-${String(index + 1).padStart(idWidth, '0')}`,
+      word: item.word,
+      reading: item.reading,
+      meaning: item.meaning,
+      level,
+      partOfSpeech,
+      relatedKanji: getRelatedKanji(item.word),
+      contexts: createVocabularyContexts(item, partOfSpeech),
+    } satisfies VocabularyInfo,
+  };
+});
+
+const n5VocabularyWithLesson = createVocabularyWithLesson(rawMinnaN5Vocabulary, 'N5', 'minna-n5', 3);
+const n4VocabularyWithLesson = createVocabularyWithLesson(rawMinnaN4Vocabulary, 'N4', 'minna-n4', 4);
 
 const minnaN5VocabularyLessons: VocabularyLessonGroup[] = minnaN5LessonTitles
   .map((title, index) => ({
     level: 'N5' as JLPTLevel,
+    lessonNumber: index + 1,
     title,
-    words: vocabularyWithLesson.filter((item) => item.lesson === index + 1).map((item) => item.word),
+    words: n5VocabularyWithLesson.filter((item) => item.lesson === index + 1).map((item) => item.word),
   }))
   .filter((lesson) => lesson.words.length > 0);
 
-export const vocabularyData: VocabularyInfo[] = vocabularyWithLesson.map((item) => item.word);
+const minnaN4VocabularyLessons: VocabularyLessonGroup[] = minnaN4LessonTitles
+  .map((title, index) => ({
+    level: 'N4' as JLPTLevel,
+    lessonNumber: index + 26,
+    title,
+    words: n4VocabularyWithLesson.filter((item) => item.lesson === index + 26).map((item) => item.word),
+  }))
+  .filter((lesson) => lesson.words.length > 0);
+
+export const vocabularyData: VocabularyInfo[] = [
+  ...n5VocabularyWithLesson.map((item) => item.word),
+  ...n4VocabularyWithLesson.map((item) => item.word),
+];
 export const vocabularyById = new Map(vocabularyData.map((item) => [item.id, item]));
 
 export const getVocabularyRouteLessons = (level: JLPTLevel, n4Only = false): VocabularyLessonGroup[] => {
-  void n4Only;
   if (level === 'N5') return minnaN5VocabularyLessons;
-  return [];
+  if (n4Only) return minnaN4VocabularyLessons;
+  return [...minnaN5VocabularyLessons, ...minnaN4VocabularyLessons];
 };
 
 export const getVocabularyRouteData = (level: JLPTLevel, n4Only = false) => (
   getVocabularyRouteLessons(level, n4Only).flatMap((lesson) => lesson.words)
 );
+
+export const getVocabularyByPartOfSpeech = (
+  level: JLPTLevel,
+  partOfSpeech: LearningVocabularyPartOfSpeech,
+  n4Only = false,
+) => getVocabularyRouteData(level, n4Only).filter((item) => item.partOfSpeech === partOfSpeech);

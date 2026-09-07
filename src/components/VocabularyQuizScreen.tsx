@@ -14,7 +14,7 @@ type QuizAnswer = { kind: VocabularyQuizKind; correct: boolean; wordId: string }
 type Props = {
   pool: VocabularyInfo[];
   level: JLPTLevel;
-  mode: 'practice' | 'exam';
+  mode: 'practice' | 'rapid' | 'exam';
   requestedQuestionCount?: number;
   title?: string;
   settings: StudySettings;
@@ -94,7 +94,7 @@ export function VocabularyQuizScreen({ pool, level, mode, requestedQuestionCount
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [answers, setAnswers] = useState<QuizAnswer[]>([]);
   const [finished, setFinished] = useState(false);
-  const [secondsLeft, setSecondsLeft] = useState(mode === 'exam' ? settings.examMinutes * 60 : 0);
+  const [secondsLeft, setSecondsLeft] = useState(mode === 'exam' ? settings.examMinutes * 60 : mode === 'rapid' ? 10 : 0);
   const [saved, setSaved] = useState(false);
   const current = questions[index];
 
@@ -122,6 +122,22 @@ export function VocabularyQuizScreen({ pool, level, mode, requestedQuestionCount
     return () => window.clearInterval(timer);
   }, [answers, finish, finished, mode]);
 
+  useEffect(() => {
+    if (mode !== 'rapid' || finished || selectedOption !== null || !current) return;
+    const timer = window.setInterval(() => {
+      setSecondsLeft((currentSeconds) => {
+        if (currentSeconds <= 1) {
+          window.clearInterval(timer);
+          setAnswers((items) => [...items, { kind: current.kind, correct: false, wordId: current.wordData.id }]);
+          setSelectedOption(-1);
+          return 0;
+        }
+        return currentSeconds - 1;
+      });
+    }, 1_000);
+    return () => window.clearInterval(timer);
+  }, [current, finished, mode, selectedOption]);
+
   if (questions.length === 0) return <div className="min-h-screen flex items-center justify-center">Không có dữ liệu Quiz từ vựng.</div>;
 
   const handleAnswer = (optionIndex: number) => {
@@ -137,6 +153,7 @@ export function VocabularyQuizScreen({ pool, level, mode, requestedQuestionCount
       finish(finalAnswers);
       return;
     }
+    if (mode === 'rapid') setSecondsLeft(10);
     setIndex((value) => value + 1);
     setSelectedOption(null);
   };
@@ -147,7 +164,7 @@ export function VocabularyQuizScreen({ pool, level, mode, requestedQuestionCount
     return { kind, correct: relevant.filter((answer) => answer.correct).length, total: relevant.length };
   });
   const labels: Record<VocabularyQuizKind, string> = { meaning: 'Nghĩa', reading: 'Cách đọc', word: 'Mặt từ', context: 'Ngữ cảnh' };
-  const quizTitle = title ?? (mode === 'exam' ? `Thi thử từ vựng ${level}` : `Quiz từ vựng ${level}`);
+  const quizTitle = title ?? (mode === 'exam' ? `Thi thử từ vựng ${level}` : mode === 'rapid' ? `Phản xạ từ vựng ${level}` : `Quiz từ vựng ${level}`);
   const minutes = Math.floor(secondsLeft / 60);
   const seconds = String(secondsLeft % 60).padStart(2, '0');
 
@@ -167,11 +184,12 @@ export function VocabularyQuizScreen({ pool, level, mode, requestedQuestionCount
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-4 sm:p-8">
       <div className="max-w-3xl mx-auto">
-        <header className="flex items-center justify-between mb-8"><button onClick={onExit} aria-label="Thoát Quiz từ vựng" className="w-11 h-11 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700"><i className="fas fa-xmark"></i></button><div className="text-center"><div className="font-black">{quizTitle}</div><div className="text-xs text-slate-400">Câu {index + 1}/{questions.length}</div></div>{mode === 'exam' ? <div className={`font-mono font-black px-3 py-2 rounded-lg ${secondsLeft < 60 ? 'bg-red-500 text-white' : 'bg-white dark:bg-slate-800'}`}>{minutes}:{seconds}</div> : <div className="w-11" />}</header>
+        <header className="flex items-center justify-between mb-8"><button onClick={onExit} aria-label="Thoát Quiz từ vựng" className="w-11 h-11 bg-white dark:bg-slate-800 rounded-full border border-slate-200 dark:border-slate-700"><i className="fas fa-xmark"></i></button><div className="text-center"><div className="font-black">{quizTitle}</div><div className="text-xs text-slate-400">Câu {index + 1}/{questions.length}</div></div>{mode !== 'practice' ? <div className={`font-mono font-black px-3 py-2 rounded-lg ${(mode === 'rapid' && secondsLeft <= 3) || (mode === 'exam' && secondsLeft < 60) ? 'bg-red-500 text-white' : 'bg-white dark:bg-slate-800'}`}>{mode === 'rapid' ? `${secondsLeft}s` : `${minutes}:${seconds}`}</div> : <div className="w-11" />}</header>
         <div className="h-2 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden mb-6"><div className="h-full bg-emerald-500" style={{ width: `${((index + 1) / questions.length) * 100}%` }} /></div>
         <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-7 sm:p-12 text-center shadow-sm mb-5"><h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-5">{current.prompt}</h2><div className={`${current.kind === 'word' || current.kind === 'context' ? 'text-3xl leading-snug' : 'font-japanese text-5xl sm:text-6xl leading-snug'} whitespace-pre-line font-black`}>{current.display}</div>{selectedOption !== null && <div className="mt-6 flex flex-wrap justify-center gap-3 text-xs"><span className="bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 px-3 py-2 rounded-lg">{withoutRomaji(current.wordData.reading, settings.hideRomaji)}</span><span className="bg-slate-100 dark:bg-slate-700 px-3 py-2 rounded-lg">{current.wordData.relatedKanji.map((item) => item.kanji).join('・') || 'Kana/Katakana'}</span><span className="bg-amber-50 dark:bg-amber-900/20 text-amber-700 dark:text-amber-200 px-3 py-2 rounded-lg">{getPrimaryContext(current.wordData).hint}</span></div>}</section>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{current.options.map((option, optionIndex) => { let style = 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-emerald-400'; if (selectedOption !== null) style = option.isCorrect ? 'bg-green-500 border-green-600 text-white' : selectedOption === optionIndex ? 'bg-red-500 border-red-600 text-white' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 opacity-45'; return <button key={`${option.label}-${optionIndex}`} disabled={selectedOption !== null} onClick={() => handleAnswer(optionIndex)} className={`p-5 rounded-2xl border-2 font-bold text-lg flex justify-between items-center ${style}`}><span className={current.kind === 'word' ? 'font-japanese text-2xl' : ''}>{option.label}</span>{selectedOption !== null && option.isCorrect && <i className="fas fa-check-circle"></i>}</button>; })}</div>
-        {selectedOption !== null && <div className="flex justify-end mt-6"><button onClick={nextQuestion} className="px-7 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-bold">{index === questions.length - 1 ? 'Xem kết quả' : 'Tiếp theo'}<i className="fas fa-arrow-right ml-2"></i></button></div>}
+        {selectedOption !== null && <div className="flex items-center justify-between gap-3 mt-6">{selectedOption === -1 ? <span className="text-sm font-bold text-red-500"><i className="fas fa-clock mr-2"></i>Hết 10 giây</span> : <span />}
+          <button onClick={nextQuestion} className="px-7 py-3 bg-slate-900 dark:bg-white text-white dark:text-slate-900 rounded-xl font-bold">{index === questions.length - 1 ? 'Xem kết quả' : 'Tiếp theo'}<i className="fas fa-arrow-right ml-2"></i></button></div>}
       </div>
     </div>
   );

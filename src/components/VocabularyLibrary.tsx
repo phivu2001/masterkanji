@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { JLPTLevel } from '@/data/jlptCore';
-import type { VocabularyInfo, VocabularyLessonGroup } from '@/data/vocabulary';
+import type { LearningVocabularyPartOfSpeech, VocabularyInfo, VocabularyLessonGroup } from '@/data/vocabulary';
 import { isDue, type StudyProgress } from '@/lib/study';
 
 type VocabularyFilter = 'all' | 'new' | 'learning' | 'hard' | 'learned' | 'due';
@@ -11,11 +11,18 @@ type Props = {
   level: JLPTLevel;
   words: VocabularyInfo[];
   lessonGroups: VocabularyLessonGroup[];
+  partOfSpeech: LearningVocabularyPartOfSpeech | null;
   progress: StudyProgress;
   onBack: () => void;
   onStartLesson: (lessonIndex: number, ids?: string[]) => void;
   onStartReview: (ids: string[]) => void;
-  onStartQuiz: (pool: VocabularyInfo[], mode: 'practice' | 'exam', questionCount?: number, title?: string) => void;
+  onStartQuiz: (pool: VocabularyInfo[], mode: 'practice' | 'rapid' | 'exam', questionCount?: number, title?: string) => void;
+};
+
+const partOfSpeechLabels: Record<LearningVocabularyPartOfSpeech, string> = {
+  verb: 'Động từ',
+  noun: 'Danh từ',
+  adjective: 'Tính từ',
 };
 
 const filters: { id: VocabularyFilter; label: string; icon: string }[] = [
@@ -27,10 +34,11 @@ const filters: { id: VocabularyFilter; label: string; icon: string }[] = [
   { id: 'due', label: 'Đến hạn', icon: 'fa-bell' },
 ];
 
-export function VocabularyLibrary({ level, words, lessonGroups, progress, onBack, onStartLesson, onStartReview, onStartQuiz }: Props) {
+export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, progress, onBack, onStartLesson, onStartReview, onStartQuiz }: Props) {
   const [filter, setFilter] = useState<VocabularyFilter>('all');
   const dueIds = words.filter((item) => isDue(progress[item.id])).map((item) => item.id);
   const learnedTotal = words.filter((item) => progress[item.id]?.status === 'learned').length;
+  const libraryTitle = partOfSpeech ? `${partOfSpeechLabels[partOfSpeech]} ${level}` : `Từ vựng ${level}`;
 
   const matchesFilter = (item: VocabularyInfo) => {
     const record = progress[item.id];
@@ -46,16 +54,17 @@ export function VocabularyLibrary({ level, words, lessonGroups, progress, onBack
         <header className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
           <div className="flex items-center gap-3">
             <button onClick={onBack} aria-label="Về bàn học" className="w-11 h-11 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-sm"><i className="fas fa-arrow-left"></i></button>
-            <div><h1 className="text-2xl sm:text-3xl font-black">Từ vựng {level}</h1><p className="text-sm text-slate-500 dark:text-slate-400">{words.length} từ • {lessonGroups.length} bài Minna no Nihongo • học bằng cụm từ/ngữ cảnh</p></div>
+            <div><h1 className="text-2xl sm:text-3xl font-black">{libraryTitle}</h1><p className="text-sm text-slate-500 dark:text-slate-400">{words.length} từ • {lessonGroups.length} bài Minna no Nihongo • thẻ che, gõ nhớ và ngữ cảnh</p></div>
           </div>
           <div className="flex flex-wrap gap-2">
             <button disabled={dueIds.length === 0} onClick={() => onStartReview(dueIds)} className="px-4 py-2 bg-orange-500 text-white disabled:opacity-40 rounded-xl font-bold"><i className="fas fa-bell mr-2"></i>Ôn từ đến hạn ({dueIds.length})</button>
+            <button disabled={words.length < 4} onClick={() => onStartQuiz(words, 'rapid', 10, `Phản xạ ${libraryTitle}`)} className="px-4 py-2 bg-rose-500 text-white disabled:opacity-40 rounded-xl font-bold"><i className="fas fa-bolt mr-2"></i>Phản xạ 10 giây</button>
             <button disabled={words.length < 4} onClick={() => onStartQuiz(words, 'exam')} className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 rounded-xl font-bold"><i className="fas fa-stopwatch mr-2"></i>Thi thử từ vựng</button>
           </div>
         </header>
 
         <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 mb-5 shadow-sm">
-          <div className="flex justify-between text-sm mb-2"><span className="font-bold">Tiến độ từ vựng {level}</span><span>{learnedTotal}/{words.length} đã thuộc</span></div>
+          <div className="flex justify-between text-sm mb-2"><span className="font-bold">Tiến độ {libraryTitle.toLocaleLowerCase('vi-VN')}</span><span>{learnedTotal}/{words.length} đã thuộc</span></div>
           <div className="h-3 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-emerald-500 to-cyan-400" style={{ width: `${(learnedTotal / Math.max(1, words.length)) * 100}%` }} /></div>
         </section>
 
@@ -79,7 +88,7 @@ export function VocabularyLibrary({ level, words, lessonGroups, progress, onBack
               <article key={`${lessonGroup.level}-${lessonGroup.title}-${index}`} className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm hover:shadow-md transition-all">
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <h2 className="text-lg font-black">Bài {index + 1}</h2>
+                    <h2 className="text-lg font-black">Bài {lessonGroup.lessonNumber}</h2>
                     <div className="mt-1 flex flex-wrap items-center gap-2">
                       <span className="text-[11px] font-black bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-300 px-2 py-0.5 rounded-full">{lessonGroup.level}</span>
                       <p className="text-xs font-bold text-slate-600 dark:text-slate-300">{lessonGroup.title}</p>

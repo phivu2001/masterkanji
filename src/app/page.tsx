@@ -13,8 +13,8 @@ import { kanjiData } from '@/data/kanji';
 import type { KanjiInfo } from '@/data/kanji';
 import { getJlptLessons, getJlptStudyOrder } from '@/data/jlptCore';
 import type { JLPTLevel } from '@/data/jlptCore';
-import { getVocabularyRouteData, getVocabularyRouteLessons, vocabularyById } from '@/data/vocabulary';
-import type { VocabularyInfo } from '@/data/vocabulary';
+import { getVocabularyByPartOfSpeech, getVocabularyRouteData, getVocabularyRouteLessons, vocabularyById } from '@/data/vocabulary';
+import type { LearningVocabularyPartOfSpeech, VocabularyInfo } from '@/data/vocabulary';
 import { useStudyStore } from '@/hooks/useStudyStore';
 import { isDue, type PersonalSet, type ReviewQuality } from '@/lib/study';
 
@@ -24,7 +24,7 @@ type StudySession = { ids: string[]; label: string; source: StudySource; lessonI
 type QuizSession = { pool: KanjiInfo[]; mode: 'practice' | 'exam'; questionCount?: number; title?: string };
 type VocabularyStudySource = 'lesson' | 'review' | 'filtered';
 type VocabularyStudySession = { ids: string[]; label: string; source: VocabularyStudySource; lessonIndex: number | null };
-type VocabularyQuizSession = { pool: VocabularyInfo[]; mode: 'practice' | 'exam'; questionCount?: number; title?: string };
+type VocabularyQuizSession = { pool: VocabularyInfo[]; mode: 'practice' | 'rapid' | 'exam'; questionCount?: number; title?: string };
 type RouteLesson = { level: JLPTLevel; title: string; items: KanjiInfo[] };
 
 const kanjiById = new Map(kanjiData.map((item) => [item.id, item]));
@@ -47,6 +47,7 @@ export default function Home() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [quizSession, setQuizSession] = useState<QuizSession | null>(null);
   const [selectedVocabularyLesson, setSelectedVocabularyLesson] = useState<number | null>(null);
+  const [selectedVocabularyPartOfSpeech, setSelectedVocabularyPartOfSpeech] = useState<LearningVocabularyPartOfSpeech | null>(null);
   const [vocabularyStudySession, setVocabularyStudySession] = useState<VocabularyStudySession | null>(null);
   const [vocabularyIndex, setVocabularyIndex] = useState(0);
   const [vocabularyQuizSession, setVocabularyQuizSession] = useState<VocabularyQuizSession | null>(null);
@@ -59,7 +60,12 @@ export default function Home() {
   const routeData = useMemo(() => routeLessons.flatMap((lesson) => lesson.items), [routeLessons]);
   const totalLessons = routeLessons.length;
   const sessionItems = useMemo(() => (studySession?.ids ?? []).map((id) => kanjiById.get(id)).filter((item): item is KanjiInfo => Boolean(item)), [studySession]);
-  const vocabularyLessons = useMemo(() => getVocabularyRouteLessons(selectedLevel, store.settings.n4Only), [selectedLevel, store.settings.n4Only]);
+  const vocabularyLessons = useMemo(() => getVocabularyRouteLessons(selectedLevel, store.settings.n4Only)
+    .map((lesson) => ({
+      ...lesson,
+      words: selectedVocabularyPartOfSpeech ? lesson.words.filter((item) => item.partOfSpeech === selectedVocabularyPartOfSpeech) : lesson.words,
+    }))
+    .filter((lesson) => lesson.words.length > 0), [selectedLevel, selectedVocabularyPartOfSpeech, store.settings.n4Only]);
   const vocabularyRouteData = useMemo(() => vocabularyLessons.flatMap((lesson) => lesson.words), [vocabularyLessons]);
   const vocabularySessionItems = useMemo(() => (vocabularyStudySession?.ids ?? []).map((id) => vocabularyById.get(id)).filter((item): item is VocabularyInfo => Boolean(item)), [vocabularyStudySession]);
   const allCoreData = useMemo(() => getJlptStudyOrder('N4').map((character) => kanjiByCharacter.get(character)).filter((item): item is KanjiInfo => Boolean(item)), []);
@@ -75,6 +81,20 @@ export default function Home() {
       n4Due: n4Vocabulary.filter((item) => isDue(store.vocabularyProgress[item.id])).length,
     };
   }, [store.settings.n4Only, store.vocabularyProgress]);
+  const vocabularyPartOfSpeechCounts = useMemo(() => ({
+    verb: {
+      n5: getVocabularyByPartOfSpeech('N5', 'verb').length,
+      n4: getVocabularyByPartOfSpeech('N4', 'verb', store.settings.n4Only).length,
+    },
+    noun: {
+      n5: getVocabularyByPartOfSpeech('N5', 'noun').length,
+      n4: getVocabularyByPartOfSpeech('N4', 'noun', store.settings.n4Only).length,
+    },
+    adjective: {
+      n5: getVocabularyByPartOfSpeech('N5', 'adjective').length,
+      n4: getVocabularyByPartOfSpeech('N4', 'adjective', store.settings.n4Only).length,
+    },
+  }), [store.settings.n4Only]);
   const dashboardStats = useMemo(() => ({
     learned: allCoreData.filter((item) => store.progress[item.id]?.status === 'learned').length,
     learning: allCoreData.filter((item) => store.progress[item.id]?.status === 'learning').length,
@@ -132,6 +152,19 @@ export default function Home() {
 
   const selectVocabularyLevel = (level: JLPTLevel) => {
     setSelectedLevel(level);
+    setSelectedVocabularyPartOfSpeech(null);
+    setSelectedVocabularyLesson(null);
+    setView('vocabulary');
+  };
+
+  const selectVocabularyPartOfSpeech = (level: JLPTLevel, partOfSpeech: LearningVocabularyPartOfSpeech) => {
+    const words = getVocabularyByPartOfSpeech(level, partOfSpeech, store.settings.n4Only);
+    if (words.length === 0) {
+      setNotice(`Chưa có dữ liệu ${partOfSpeech === 'verb' ? 'động từ' : partOfSpeech === 'noun' ? 'danh từ' : 'tính từ'} ${level}.`);
+      return;
+    }
+    setSelectedLevel(level);
+    setSelectedVocabularyPartOfSpeech(partOfSpeech);
     setSelectedVocabularyLesson(null);
     setView('vocabulary');
   };
@@ -182,8 +215,7 @@ export default function Home() {
   const startReview = (ids: string[]) => startSession(ids, 'Ôn tập SRS', 'review');
 
   const openVocabularyLesson = (lessonIndex: number, filteredIds?: string[], startIndex = 0) => {
-    const lessons = getVocabularyRouteLessons(selectedLevel, store.settings.n4Only);
-    const lesson = lessons[lessonIndex];
+    const lesson = vocabularyLessons[lessonIndex];
     if (!lesson) {
       setNotice('Không tìm thấy bài từ vựng này.');
       return;
@@ -290,7 +322,7 @@ export default function Home() {
     nextVocabulary();
   };
 
-  const startVocabularyQuiz = (pool: VocabularyInfo[], mode: 'practice' | 'exam', questionCount?: number, title?: string) => {
+  const startVocabularyQuiz = (pool: VocabularyInfo[], mode: 'practice' | 'rapid' | 'exam', questionCount?: number, title?: string) => {
     if (pool.length < 4) {
       setNotice('Cần ít nhất 4 từ vựng để tạo Quiz.');
       return;
@@ -300,7 +332,7 @@ export default function Home() {
   };
 
   const completeVocabularyQuiz = (result: { score: number; total: number; wrongIds: string[] }) => {
-    store.addQuizHistory({ level: selectedLevel, score: result.score, total: result.total, mode: vocabularyQuizSession?.mode ?? 'practice', scope: 'vocabulary' });
+    store.addQuizHistory({ level: selectedLevel, score: result.score, total: result.total, mode: vocabularyQuizSession?.mode === 'exam' ? 'exam' : 'practice', scope: 'vocabulary' });
     result.wrongIds.forEach((id) => store.reviewVocabulary(id, 'again'));
   };
 
@@ -364,17 +396,17 @@ export default function Home() {
 
   let content;
   if (view === 'home') {
-    content = <HomeDashboard {...dashboardStats} streak={store.streak} todayLearned={store.todayActivity.newLearned} lastPosition={store.lastPosition} settings={store.settings} personalSets={store.personalSets} favoriteCount={store.favorites.length} vocabularyCounts={vocabularyCounts} quizHistory={store.quizHistory} hardest={hardestKanji} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onSelectLevel={selectLevel} onSelectVocabulary={selectVocabularyLevel} onContinue={continueLearning} onUpdateSettings={store.updateSettings} onCreateSet={store.createSet} onRenameSet={store.renameSet} onDeleteSet={store.deleteSet} onStartSet={startPersonalSet} onStartFavorites={startFavorites} onExport={exportBackup} onExportCsv={exportCsv} onImport={() => importInputRef.current?.click()} onEnableReminder={enableReminder} />;
+    content = <HomeDashboard {...dashboardStats} streak={store.streak} todayLearned={store.todayActivity.newLearned} lastPosition={store.lastPosition} settings={store.settings} personalSets={store.personalSets} favoriteCount={store.favorites.length} vocabularyCounts={vocabularyCounts} vocabularyPartOfSpeechCounts={vocabularyPartOfSpeechCounts} quizHistory={store.quizHistory} hardest={hardestKanji} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onSelectLevel={selectLevel} onSelectVocabulary={selectVocabularyLevel} onSelectVocabularyPartOfSpeech={selectVocabularyPartOfSpeech} onContinue={continueLearning} onUpdateSettings={store.updateSettings} onCreateSet={store.createSet} onRenameSet={store.renameSet} onDeleteSet={store.deleteSet} onStartSet={startPersonalSet} onStartFavorites={startFavorites} onExport={exportBackup} onExportCsv={exportCsv} onImport={() => importInputRef.current?.click()} onEnableReminder={enableReminder} />;
   } else if (view === 'lessons') {
     content = <LessonLibrary level={selectedLevel} levelData={routeData} lessonGroups={routeLessons} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onOpenVocabulary={() => selectVocabularyLevel(selectedLevel)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
   } else if (view === 'quiz' && quizSession) {
     content = <QuizScreen pool={quizSession.pool} level={selectedLevel} mode={quizSession.mode} requestedQuestionCount={quizSession.questionCount} title={quizSession.title} settings={store.settings} onExit={() => { setQuizSession(null); setView('lessons'); }} onComplete={completeQuiz} />;
   } else if (view === 'vocabulary') {
-    content = <VocabularyLibrary level={selectedLevel} words={vocabularyRouteData} lessonGroups={vocabularyLessons} progress={store.vocabularyProgress} onBack={() => setView('home')} onStartLesson={openVocabularyLesson} onStartReview={startVocabularyReview} onStartQuiz={startVocabularyQuiz} />;
+    content = <VocabularyLibrary level={selectedLevel} words={vocabularyRouteData} lessonGroups={vocabularyLessons} partOfSpeech={selectedVocabularyPartOfSpeech} progress={store.vocabularyProgress} onBack={() => setView('home')} onStartLesson={openVocabularyLesson} onStartReview={startVocabularyReview} onStartQuiz={startVocabularyQuiz} />;
   } else if (view === 'vocabularyQuiz' && vocabularyQuizSession) {
     content = <VocabularyQuizScreen pool={vocabularyQuizSession.pool} level={selectedLevel} mode={vocabularyQuizSession.mode} requestedQuestionCount={vocabularyQuizSession.questionCount} title={vocabularyQuizSession.title} settings={store.settings} onExit={() => { setVocabularyQuizSession(null); setView('vocabulary'); }} onComplete={completeVocabularyQuiz} />;
   } else if (view === 'vocabularyStudy' && vocabularyStudySession && vocabularySessionItems.length > 0) {
-    content = <VocabularyStudyScreen items={vocabularySessionItems} currentIndex={vocabularyIndex} sessionLabel={vocabularyStudySession.label} lessonNumber={vocabularyStudySession.lessonIndex === null ? null : vocabularyStudySession.lessonIndex + 1} totalLessons={vocabularyLessons.length} progress={store.vocabularyProgress} settings={store.settings} isReview={vocabularyStudySession.source === 'review'} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onBackToLibrary={() => setView('vocabulary')} onHome={() => setView('home')} onPrevious={() => moveToVocabularyIndex(vocabularyIndex - 1)} onNext={nextVocabulary} onPreviousLesson={() => { if (selectedVocabularyLesson !== null && selectedVocabularyLesson > 0) openVocabularyLesson(selectedVocabularyLesson - 1); }} onNextLesson={() => { if (selectedVocabularyLesson !== null && selectedVocabularyLesson < vocabularyLessons.length - 1) openVocabularyLesson(selectedVocabularyLesson + 1); }} onSelectIndex={moveToVocabularyIndex} onRate={rateCurrentVocabulary} />;
+    content = <VocabularyStudyScreen items={vocabularySessionItems} currentIndex={vocabularyIndex} sessionLabel={vocabularyStudySession.label} lessonNumber={vocabularyStudySession.lessonIndex === null ? null : vocabularyLessons[vocabularyStudySession.lessonIndex]?.lessonNumber ?? null} lessonPosition={vocabularyStudySession.lessonIndex === null ? null : vocabularyStudySession.lessonIndex + 1} totalLessons={vocabularyLessons.length} progress={store.vocabularyProgress} settings={store.settings} isReview={vocabularyStudySession.source === 'review'} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onBackToLibrary={() => setView('vocabulary')} onHome={() => setView('home')} onPrevious={() => moveToVocabularyIndex(vocabularyIndex - 1)} onNext={nextVocabulary} onPreviousLesson={() => { if (selectedVocabularyLesson !== null && selectedVocabularyLesson > 0) openVocabularyLesson(selectedVocabularyLesson - 1); }} onNextLesson={() => { if (selectedVocabularyLesson !== null && selectedVocabularyLesson < vocabularyLessons.length - 1) openVocabularyLesson(selectedVocabularyLesson + 1); }} onSelectIndex={moveToVocabularyIndex} onRate={rateCurrentVocabulary} />;
   } else if (studySession && sessionItems.length > 0) {
     content = <StudyScreen items={sessionItems} currentIndex={currentIndex} sessionLabel={studySession.label} lessonNumber={studySession.lessonIndex === null ? null : studySession.lessonIndex + 1} totalLessons={totalLessons} progress={store.progress} settings={store.settings} favorites={store.favorites} personalSets={store.personalSets} writingScores={store.writingScores} isReview={studySession.source === 'review'} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onBackToLessons={() => setView('lessons')} onHome={() => setView('home')} onSearch={() => setShowSearch(true)} onPrevious={() => moveToIndex(currentIndex - 1)} onNext={nextKanji} onPreviousLesson={() => { if (selectedLesson !== null && selectedLesson > 0) openLesson(selectedLesson - 1); }} onNextLesson={() => { if (selectedLesson !== null && selectedLesson < totalLessons - 1) openLesson(selectedLesson + 1); }} onSelectIndex={moveToIndex} onRate={rateCurrentKanji} onToggleFavorite={store.toggleFavorite} onToggleSet={store.toggleKanjiInSet} onSaveWritingScore={store.saveWritingScore} />;
   } else {

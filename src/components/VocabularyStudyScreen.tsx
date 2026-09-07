@@ -5,11 +5,27 @@ import type { VocabularyInfo } from '@/data/vocabulary';
 import type { ReviewQuality, StudyProgress, StudySettings } from '@/lib/study';
 import { formatDue, withoutRomaji } from '@/lib/study';
 
+type TypingMode = 'meaning' | 'dictation';
+type TypingResult = 'idle' | 'correct' | 'incorrect';
+
+const normalizeTypingAnswer = (value: string) => value
+  .normalize('NFKC')
+  .toLocaleLowerCase('ja-JP')
+  .replace(/[\s。、・]/g, '');
+
+const partOfSpeechLabels = {
+  verb: 'Động từ',
+  noun: 'Danh từ',
+  adjective: 'Tính từ',
+  other: 'Cụm giao tiếp',
+} as const;
+
 type Props = {
   items: VocabularyInfo[];
   currentIndex: number;
   sessionLabel: string;
   lessonNumber: number | null;
+  lessonPosition: number | null;
   totalLessons: number;
   progress: StudyProgress;
   settings: StudySettings;
@@ -30,17 +46,34 @@ export function VocabularyStudyScreen(props: Props) {
   const [isFlipped, setIsFlipped] = useState(false);
   const [showList, setShowList] = useState(false);
   const data = props.items[props.currentIndex] ?? props.items[0];
+  const [typingMode, setTypingMode] = useState<TypingMode>('meaning');
+  const [typingValue, setTypingValue] = useState('');
+  const [typingResult, setTypingResult] = useState<TypingResult>('idle');
+  const [showConjugations, setShowConjugations] = useState(false);
+
+  const resetPracticeState = () => {
+    setIsFlipped(false);
+    setTypingValue('');
+    setTypingResult('idle');
+    setShowConjugations(false);
+  };
+
+  const changeTypingMode = (mode: TypingMode) => {
+    setTypingMode(mode);
+    setTypingValue('');
+    setTypingResult('idle');
+  };
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT') return;
-      if (event.key === 'ArrowLeft') props.onPrevious();
-      if (event.key === 'ArrowRight') props.onNext();
+      if (event.key === 'ArrowLeft') { resetPracticeState(); props.onPrevious(); }
+      if (event.key === 'ArrowRight') { resetPracticeState(); props.onNext(); }
       if (event.key === ' ') { event.preventDefault(); setIsFlipped((value) => !value); }
-      if (event.key === '1') props.onRate('again');
-      if (event.key === '2') props.onRate('hard');
-      if (event.key === '3') props.onRate('good');
+      if (event.key === '1') { resetPracticeState(); props.onRate('again'); }
+      if (event.key === '2') { resetPracticeState(); props.onRate('hard'); }
+      if (event.key === '3') { resetPracticeState(); props.onRate('good'); }
       if (event.key.toLowerCase() === 'l') setShowList((value) => !value);
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -60,8 +93,24 @@ export function VocabularyStudyScreen(props: Props) {
     window.speechSynthesis.speak(utterance);
   };
 
+  const checkTypingAnswer = () => {
+    const submitted = normalizeTypingAnswer(typingValue);
+    if (!submitted) return;
+    const acceptedAnswers = [data.reading, data.word]
+      .flatMap((answer) => answer.split(/[／/]/))
+      .map(normalizeTypingAnswer);
+    setTypingResult(acceptedAnswers.includes(submitted) ? 'correct' : 'incorrect');
+  };
+
   const record = props.progress[data.id];
   const contexts = data.contexts.slice(0, 3);
+  const politeStem = data.partOfSpeech === 'verb' && data.word.endsWith('ます') ? data.word.slice(0, -2) : '';
+  const politeConjugations = politeStem ? [
+    { label: 'Hiện tại', value: `${politeStem}ます` },
+    { label: 'Phủ định', value: `${politeStem}ません` },
+    { label: 'Quá khứ', value: `${politeStem}ました` },
+    { label: 'Quá khứ phủ định', value: `${politeStem}ませんでした` },
+  ] : [];
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 pb-20">
@@ -76,20 +125,20 @@ export function VocabularyStudyScreen(props: Props) {
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 mb-5">
           <div className="flex flex-wrap items-center gap-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 p-2 rounded-xl shadow-sm">
             <button onClick={props.onBackToLibrary} className="h-10 px-3 rounded-lg font-bold hover:bg-slate-100 dark:hover:bg-slate-700"><i className="fas fa-list-ul mr-2"></i>Các bài từ vựng</button>
-            <button disabled={props.lessonNumber === null || props.lessonNumber <= 1 || props.isReview} onClick={props.onPreviousLesson} aria-label="Bài từ vựng trước" className="w-10 h-10 disabled:opacity-30 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><i className="fas fa-chevron-left"></i></button>
+            <button disabled={props.lessonPosition === null || props.lessonPosition <= 1 || props.isReview} onClick={() => { resetPracticeState(); props.onPreviousLesson(); }} aria-label="Bài từ vựng trước" className="w-10 h-10 disabled:opacity-30 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"><i className="fas fa-chevron-left"></i></button>
             <div className="min-w-28 text-center"><div className="text-[10px] uppercase tracking-wider font-bold text-emerald-500">{props.lessonNumber ? `Bài ${props.lessonNumber}` : 'Phiên học'}</div><div className="text-sm font-bold">{props.sessionLabel}</div></div>
-            <button disabled={props.lessonNumber === null || props.lessonNumber >= props.totalLessons || props.isReview} onClick={props.onNextLesson} className="h-10 px-3 bg-emerald-500 text-white disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:text-slate-400 rounded-lg font-bold"><span>Bài tiếp theo</span><i className="fas fa-chevron-right ml-2"></i></button>
+            <button disabled={props.lessonPosition === null || props.lessonPosition >= props.totalLessons || props.isReview} onClick={() => { resetPracticeState(); props.onNextLesson(); }} className="h-10 px-3 bg-emerald-500 text-white disabled:bg-slate-200 dark:disabled:bg-slate-700 disabled:text-slate-400 rounded-lg font-bold"><span>Bài tiếp theo</span><i className="fas fa-chevron-right ml-2"></i></button>
           </div>
           <div className="flex gap-2">
             <button onClick={() => setShowList((value) => !value)} className="flex-1 px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold"><i className={`fas ${showList ? 'fa-book-open' : 'fa-list'} mr-2`}></i>{showList ? 'Học tiếp' : 'Danh sách'}</button>
-            <button onClick={props.onPrevious} className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold"><i className="fas fa-arrow-left mr-2"></i>Từ trước</button>
-            <button onClick={props.onNext} className="px-4 py-2 bg-emerald-500 text-white rounded-lg font-bold">Từ tiếp theo<i className="fas fa-arrow-right ml-2"></i></button>
+            <button onClick={() => { resetPracticeState(); props.onPrevious(); }} className="px-4 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg font-bold"><i className="fas fa-arrow-left mr-2"></i>Từ trước</button>
+            <button onClick={() => { resetPracticeState(); props.onNext(); }} className="px-4 py-2 bg-emerald-500 text-white rounded-lg font-bold">Từ tiếp theo<i className="fas fa-arrow-right ml-2"></i></button>
           </div>
         </div>
 
         {showList ? (
           <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{props.items.map((item, index) => <button key={item.id} onClick={() => { props.onSelectIndex(index); setShowList(false); }} className={`relative text-left p-4 rounded-xl border-2 ${index === props.currentIndex ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-100 dark:border-slate-700'}`}><span className="font-japanese text-2xl font-black block">{item.word}</span><span className="text-xs text-slate-400 block">{withoutRomaji(item.reading, props.settings.hideRomaji)}</span><span className="text-sm">{item.meaning}</span>{props.progress[item.id]?.status === 'learned' && <i className="fas fa-check-circle text-green-500 absolute top-2 right-2 text-xs"></i>}</button>)}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">{props.items.map((item, index) => <button key={item.id} onClick={() => { resetPracticeState(); props.onSelectIndex(index); setShowList(false); }} className={`relative text-left p-4 rounded-xl border-2 ${index === props.currentIndex ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' : 'border-slate-100 dark:border-slate-700'}`}><span className="font-japanese text-2xl font-black block">{item.word}</span><span className="text-xs text-slate-400 block">{withoutRomaji(item.reading, props.settings.hideRomaji)}</span><span className="text-sm">{item.meaning}</span>{props.progress[item.id]?.status === 'learned' && <i className="fas fa-check-circle text-green-500 absolute top-2 right-2 text-xs"></i>}</button>)}</div>
           </section>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -99,6 +148,7 @@ export function VocabularyStudyScreen(props: Props) {
                   <div className="bg-slate-50 dark:bg-slate-950 p-6 flex flex-col items-center border-b md:border-b-0 md:border-r border-slate-200 dark:border-slate-700">
                     <div className="flex w-full justify-between text-xs font-bold"><span className="px-2 py-1 bg-slate-200 dark:bg-slate-700 rounded">{record?.status === 'learned' ? 'Đã thuộc' : record?.status === 'hard' ? 'Hay sai' : record ? 'Đang học' : 'Chưa học'}</span><span className="text-slate-400">{formatDue(record)}</span></div>
                     <button onClick={() => speak(data.word)} className="font-japanese text-5xl sm:text-6xl leading-tight font-black my-8 text-center hover:text-emerald-500">{data.word}</button>
+                    <div className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-2">{partOfSpeechLabels[data.partOfSpeech]}</div>
                     <div className="text-sm text-slate-500 dark:text-slate-400 text-center">{withoutRomaji(data.reading, props.settings.hideRomaji)}</div>
                     <button onClick={() => speak(data.word)} className="mt-5 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg font-bold"><i className="fas fa-volume-high mr-2"></i>Nghe phát âm</button>
                   </div>
@@ -133,6 +183,26 @@ export function VocabularyStudyScreen(props: Props) {
                         ))}
                       </div>
                     </div>
+                    <section className="mb-5 rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-900/10 p-4 sm:p-5">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <div><h3 className="font-black"><i className="fas fa-keyboard text-blue-500 mr-2"></i>Chủ động gợi nhớ</h3><p className="text-xs text-slate-500 dark:text-slate-400">Tự gõ trước khi xem đáp án.</p></div>
+                        <div className="flex rounded-xl bg-white dark:bg-slate-800 p-1 border border-blue-100 dark:border-slate-700">
+                          <button onClick={() => changeTypingMode('meaning')} className={`px-3 py-2 rounded-lg text-xs font-black ${typingMode === 'meaning' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nhìn nghĩa</button>
+                          <button onClick={() => { changeTypingMode('dictation'); window.setTimeout(() => speak(data.word), 0); }} className={`px-3 py-2 rounded-lg text-xs font-black ${typingMode === 'dictation' ? 'bg-blue-500 text-white' : 'text-slate-500'}`}>Nghe chép</button>
+                        </div>
+                      </div>
+                      {typingMode === 'meaning' ? <div className="text-lg font-black mb-3">{data.meaning}</div> : <button onClick={() => speak(data.word)} className="mb-3 px-4 py-2 rounded-xl bg-blue-500 text-white font-bold"><i className="fas fa-volume-high mr-2"></i>Nghe lại từ</button>}
+                      <form onSubmit={(event) => { event.preventDefault(); checkTypingAnswer(); }} className="flex flex-col sm:flex-row gap-2">
+                        <input value={typingValue} onChange={(event) => { setTypingValue(event.target.value); setTypingResult('idle'); }} autoComplete="off" spellCheck={false} placeholder="Gõ cách đọc bằng Kana hoặc mặt từ..." className="min-w-0 flex-1 rounded-xl border border-blue-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 outline-none focus:border-blue-500 font-japanese" />
+                        <button className="px-5 py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black">Kiểm tra</button>
+                      </form>
+                      {typingResult === 'correct' && <div className="mt-3 rounded-xl bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 px-4 py-3 font-bold"><i className="fas fa-circle-check mr-2"></i>Chính xác! {data.word} · {data.reading}</div>}
+                      {typingResult === 'incorrect' && <div className="mt-3 rounded-xl bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-4 py-3"><b><i className="fas fa-circle-xmark mr-2"></i>Chưa đúng.</b> Đáp án: <span className="font-japanese font-black">{data.reading}</span></div>}
+                    </section>
+                    {politeConjugations.length > 0 && <section className="mb-5 rounded-2xl border border-orange-100 dark:border-orange-900/40 bg-orange-50/60 dark:bg-orange-900/10 p-4 sm:p-5">
+                      <button onClick={() => setShowConjugations((value) => !value)} className="w-full flex items-center justify-between text-left"><span><b><i className="fas fa-table-cells text-orange-500 mr-2"></i>Bảng chia thể lịch sự</b><span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">Bấm để luyện dạng ます, phủ định và quá khứ.</span></span><i className={`fas fa-chevron-${showConjugations ? 'up' : 'down'} text-orange-500`}></i></button>
+                      {showConjugations && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">{politeConjugations.map((form) => <button key={form.label} onClick={() => speak(form.value)} className="text-left bg-white dark:bg-slate-800 border border-orange-100 dark:border-slate-700 rounded-xl p-3"><span className="block text-[11px] uppercase font-black text-orange-500">{form.label}</span><span className="font-japanese text-xl font-black">{form.value}</span><i className="fas fa-volume-high float-right mt-1 text-orange-400"></i></button>)}</div>}
+                    </section>}
                     <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 text-amber-900 dark:text-amber-200 rounded-xl p-4"><i className="fas fa-lightbulb text-amber-500 mr-2"></i>Cách học nhanh: đọc to cụm/câu mẫu trước, tự tưởng tượng tình huống, rồi mới bấm 1/2/3 để lên lịch ôn.</div>
                   </div>
                 </div>
@@ -141,7 +211,7 @@ export function VocabularyStudyScreen(props: Props) {
 
             <aside className="space-y-5">
               <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><div className="flex justify-between mb-2 text-sm"><span>Tiến độ phiên</span><b>{props.currentIndex + 1}/{props.items.length}</b></div><div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${((props.currentIndex + 1) / props.items.length) * 100}%` }} /></div><p className="text-xs text-slate-400 mt-3">Phím tắt: ←/→ chuyển từ, Space lật, 1/2/3 đánh giá, L danh sách.</p></section>
-              <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><h3 className="font-black mb-4">Flashcard từ vựng</h3><button onClick={() => setIsFlipped((value) => !value)} className="w-full h-64 perspective-1000"><span className={`relative block w-full h-full transition-transform duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}><span className="absolute inset-0 backface-hidden rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><span className="font-japanese text-4xl font-black text-center">{data.word}</span><span className="text-xs text-slate-400 mt-3">Bấm hoặc Space để lật</span></span><span className="absolute inset-0 backface-hidden rotate-y-180 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><b className="text-xl text-center">{data.meaning}</b><span className="text-xs text-slate-400 mt-4">{withoutRomaji(data.reading, props.settings.hideRomaji)}</span></span></span></button><div className="grid grid-cols-3 gap-2 mt-4"><button onClick={() => props.onRate('again')} className="py-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg font-bold">1 · Lại</button><button onClick={() => props.onRate('hard')} className="py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg font-bold">2 · Khó</button><button onClick={() => props.onRate('good')} className="py-2 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-lg font-bold">3 · Tốt</button></div></section>
+              <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><h3 className="font-black mb-4">Flashcard từ vựng</h3><button onClick={() => setIsFlipped((value) => !value)} className="w-full h-64 perspective-1000"><span className={`relative block w-full h-full transition-transform duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}><span className="absolute inset-0 backface-hidden rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><span className="font-japanese text-4xl font-black text-center">{data.word}</span><span className="text-xs text-slate-400 mt-3">Bấm hoặc Space để lật</span></span><span className="absolute inset-0 backface-hidden rotate-y-180 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><b className="text-xl text-center">{data.meaning}</b><span className="text-xs text-slate-400 mt-4">{withoutRomaji(data.reading, props.settings.hideRomaji)}</span></span></span></button><div className="grid grid-cols-3 gap-2 mt-4"><button onClick={() => { resetPracticeState(); props.onRate('again'); }} className="py-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg font-bold">1 · Lại</button><button onClick={() => { resetPracticeState(); props.onRate('hard'); }} className="py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg font-bold">2 · Khó</button><button onClick={() => { resetPracticeState(); props.onRate('good'); }} className="py-2 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-lg font-bold">3 · Tốt</button></div></section>
               <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5"><h3 className="font-black mb-3">Lịch sử từ này</h3><div className="grid grid-cols-2 gap-2 text-sm"><div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3"><div className="text-green-600 font-black text-xl">{record?.correctCount ?? 0}</div>Đúng</div><div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3"><div className="text-red-600 font-black text-xl">{record?.incorrectCount ?? 0}</div>Sai</div></div></section>
             </aside>
           </div>

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { getJlptStudyOrder } from '@/data/jlptCore';
 import type { JLPTLevel } from '@/data/jlptCore';
+import type { LearningVocabularyPartOfSpeech } from '@/data/vocabulary';
 import type { LastPosition, PersonalSet, QuizHistoryItem, StudySettings } from '@/lib/study';
 
 type Props = {
@@ -17,12 +18,14 @@ type Props = {
   personalSets: PersonalSet[];
   favoriteCount: number;
   vocabularyCounts: { n5: number; n4: number; n5Learned: number; n5Due: number; n4Learned: number; n4Due: number };
+  vocabularyPartOfSpeechCounts: Record<LearningVocabularyPartOfSpeech, { n5: number; n4: number }>;
   quizHistory: QuizHistoryItem[];
   hardest: { id: string; kanji: string; hanviet: string; incorrect: number }[];
   isDarkMode: boolean;
   onToggleDarkMode: () => void;
   onSelectLevel: (level: JLPTLevel) => void;
   onSelectVocabulary: (level: JLPTLevel) => void;
+  onSelectVocabularyPartOfSpeech: (level: JLPTLevel, partOfSpeech: LearningVocabularyPartOfSpeech) => void;
   onContinue: () => void;
   onUpdateSettings: (patch: Partial<StudySettings>) => void;
   onCreateSet: (name: string) => void;
@@ -42,6 +45,20 @@ const statCards = [
   { key: 'hard', label: 'Hay sai', icon: 'fa-triangle-exclamation', color: 'text-red-500 bg-red-50 dark:bg-red-900/20' },
   { key: 'due', label: 'Đến hạn ôn', icon: 'fa-bell', color: 'text-orange-500 bg-orange-50 dark:bg-orange-900/20' },
 ] as const;
+
+const vocabularyPartOfSpeechCards: {
+  id: LearningVocabularyPartOfSpeech;
+  label: string;
+  japanese: string;
+  description: string;
+  icon: string;
+  color: string;
+  softColor: string;
+}[] = [
+  { id: 'verb', label: 'Động từ', japanese: '動詞', description: 'Hành động, chia thể và cụm từ', icon: 'fa-person-running', color: 'text-orange-500', softColor: 'bg-orange-50 dark:bg-orange-900/20' },
+  { id: 'noun', label: 'Danh từ', japanese: '名詞', description: 'Người, vật, nơi chốn và chủ đề', icon: 'fa-cube', color: 'text-violet-500', softColor: 'bg-violet-50 dark:bg-violet-900/20' },
+  { id: 'adjective', label: 'Tính từ', japanese: '形容詞', description: 'Miêu tả, đối lập và ngữ cảnh', icon: 'fa-palette', color: 'text-pink-500', softColor: 'bg-pink-50 dark:bg-pink-900/20' },
+];
 
 export function HomeDashboard(props: Props) {
   const [newSetName, setNewSetName] = useState('');
@@ -126,6 +143,27 @@ export function HomeDashboard(props: Props) {
             <button onClick={() => props.onSelectVocabulary('N4')} className="text-left bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 hover:border-cyan-500 rounded-2xl p-6 transition-all shadow-sm">
               <div className="flex justify-between items-start"><div><div className="text-4xl text-cyan-500 font-black">語</div><div className="font-bold text-lg">Vocabulary N4</div><div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{props.vocabularyCounts.n4Learned} từ đã thuộc • {props.vocabularyCounts.n4Due} đến hạn</div></div><span className="bg-cyan-50 dark:bg-cyan-900/30 text-cyan-600 dark:text-cyan-300 px-3 py-1 rounded-full text-sm font-bold">{props.vocabularyCounts.n4} từ</span></div>
             </button>
+          </div>
+          <div className="mt-6 mb-3">
+            <h3 className="font-black text-lg">Học theo từ loại</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Luyện nhớ chủ động bằng thẻ che, gõ đáp án, phản xạ nhanh và câu theo ngữ cảnh.</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {vocabularyPartOfSpeechCards.map((card) => {
+              const counts = props.vocabularyPartOfSpeechCounts[card.id];
+              return (
+                <article key={card.id} className="bg-white dark:bg-slate-800 border-2 border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${card.softColor} ${card.color}`}><i className={`fas ${card.icon}`}></i></div>
+                    <div className="min-w-0"><div className={`font-japanese text-sm font-black ${card.color}`}>{card.japanese}</div><h4 className="font-black text-lg">{card.label}</h4><p className="text-xs text-slate-500 dark:text-slate-400">{card.description}</p></div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button disabled={counts.n5 === 0} onClick={() => props.onSelectVocabularyPartOfSpeech('N5', card.id)} className="py-2.5 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 font-black text-sm">N5 <span className="font-normal opacity-70">· {counts.n5}</span></button>
+                    <button disabled={counts.n4 === 0} onClick={() => props.onSelectVocabularyPartOfSpeech('N4', card.id)} className="py-2.5 rounded-xl bg-cyan-50 dark:bg-cyan-900/20 text-cyan-700 dark:text-cyan-300 disabled:opacity-40 font-black text-sm">N4 <span className="font-normal opacity-70">· {counts.n4 || 'sắp có'}</span></button>
+                  </div>
+                </article>
+              );
+            })}
           </div>
         </section>
 
