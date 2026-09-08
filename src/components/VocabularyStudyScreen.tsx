@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 import type { VocabularyInfo } from '@/data/vocabulary';
 import { useFlashcardSwipe } from '@/hooks/useFlashcardSwipe';
 import { useJapaneseSpeech } from '@/hooks/useJapaneseSpeech';
-import { commitRomajiInput, convertRomajiInput, normalizeJapaneseAnswer } from '@/lib/japaneseInput';
+import { analyzeJapaneseAnswer, commitRomajiInput, convertRomajiInput } from '@/lib/japaneseInput';
 import type { ReviewQuality, StudyProgress, StudySettings } from '@/lib/study';
 import { formatDue, withoutRomaji } from '@/lib/study';
+import { JapaneseAnswerFeedback } from './JapaneseAnswerFeedback';
+import { VocabularyGrammarPractice } from './VocabularyGrammarPractice';
 
 type TypingMode = 'meaning' | 'dictation';
 type TypingResult = 'idle' | 'correct' | 'incorrect';
@@ -47,14 +49,16 @@ export function VocabularyStudyScreen(props: Props) {
   const [typingMode, setTypingMode] = useState<TypingMode>('meaning');
   const [typingValue, setTypingValue] = useState('');
   const [typingResult, setTypingResult] = useState<TypingResult>('idle');
-  const [showConjugations, setShowConjugations] = useState(false);
+  const [submittedTypingValue, setSubmittedTypingValue] = useState('');
+  const [revealTypingAnswer, setRevealTypingAnswer] = useState(false);
   const speak = useJapaneseSpeech(props.settings.speechRate);
 
   const resetPracticeState = () => {
     setIsFlipped(false);
     setTypingValue('');
+    setSubmittedTypingValue('');
     setTypingResult('idle');
-    setShowConjugations(false);
+    setRevealTypingAnswer(false);
   };
   const { consumeSwipe, ...flashcardSwipeHandlers } = useFlashcardSwipe(
     () => { resetPracticeState(); props.onPrevious(); },
@@ -64,7 +68,9 @@ export function VocabularyStudyScreen(props: Props) {
   const changeTypingMode = (mode: TypingMode) => {
     setTypingMode(mode);
     setTypingValue('');
+    setSubmittedTypingValue('');
     setTypingResult('idle');
+    setRevealTypingAnswer(false);
   };
 
   useEffect(() => {
@@ -86,24 +92,19 @@ export function VocabularyStudyScreen(props: Props) {
   if (!data) return null;
 
   const checkTypingAnswer = () => {
-    setTypingValue(commitRomajiInput(typingValue));
-    const submitted = normalizeJapaneseAnswer(typingValue);
-    if (!submitted) return;
+    const committed = commitRomajiInput(typingValue);
+    if (!committed.trim()) return;
     const acceptedAnswers = [data.reading, data.word]
-      .flatMap((answer) => answer.split(/[／/]/))
-      .map(normalizeJapaneseAnswer);
-    setTypingResult(acceptedAnswers.includes(submitted) ? 'correct' : 'incorrect');
+      .flatMap((answer) => answer.split(/[／/]/));
+    const analysis = analyzeJapaneseAnswer(committed, acceptedAnswers);
+    setTypingValue(committed);
+    setSubmittedTypingValue(committed);
+    setTypingResult(analysis.correct ? 'correct' : 'incorrect');
   };
 
   const record = props.progress[data.id];
   const contexts = data.contexts.slice(0, 3);
-  const politeStem = data.partOfSpeech === 'verb' && data.word.endsWith('ます') ? data.word.slice(0, -2) : '';
-  const politeConjugations = politeStem ? [
-    { label: 'Hiện tại', value: `${politeStem}ます` },
-    { label: 'Phủ định', value: `${politeStem}ません` },
-    { label: 'Quá khứ', value: `${politeStem}ました` },
-    { label: 'Quá khứ phủ định', value: `${politeStem}ませんでした` },
-  ] : [];
+  const acceptedTypingAnswers = [data.reading, data.word].flatMap((answer) => answer.split(/[／/]/));
 
   return (
     <div className="min-h-screen bg-slate-100 dark:bg-slate-900 text-slate-800 dark:text-slate-100 pb-20">
@@ -143,6 +144,7 @@ export function VocabularyStudyScreen(props: Props) {
                     <button onClick={() => speak(data.word)} className="font-japanese text-5xl sm:text-6xl leading-tight font-black my-8 text-center hover:text-emerald-500">{data.word}</button>
                     <div className="text-xs font-black uppercase tracking-wider text-emerald-500 mb-2">{partOfSpeechLabels[data.partOfSpeech]}</div>
                     <div className="text-sm text-slate-500 dark:text-slate-400 text-center">{withoutRomaji(data.reading, props.settings.hideRomaji)}</div>
+                    <div className="mt-2 text-[11px] text-slate-400 text-center">Có trong bài {data.lessonNumbers.join(', ')}</div>
                     <button onClick={() => speak(data.word)} className="mt-5 px-4 py-2 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 rounded-lg font-bold"><i className="fas fa-volume-high mr-2"></i>Nghe phát âm</button>
                   </div>
 
@@ -186,16 +188,13 @@ export function VocabularyStudyScreen(props: Props) {
                       </div>
                       {typingMode === 'meaning' ? <div className="text-lg font-black mb-3">{data.meaning}</div> : <button onClick={() => speak(data.word)} className="mb-3 px-4 py-2 rounded-xl bg-blue-500 text-white font-bold"><i className="fas fa-volume-high mr-2"></i>Nghe lại từ</button>}
                       <form onSubmit={(event) => { event.preventDefault(); checkTypingAnswer(); }} className="flex flex-col sm:flex-row gap-2">
-                        <input value={typingValue} onChange={(event) => { setTypingValue(convertRomajiInput(event.target.value)); setTypingResult('idle'); }} autoComplete="off" spellCheck={false} lang="ja" inputMode="text" placeholder="Gõ tabemasu → たべます" className="min-w-0 flex-1 rounded-xl border border-blue-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 outline-none focus:border-blue-500 font-japanese" />
+                        <input value={typingValue} disabled={typingResult === 'correct' || revealTypingAnswer} onChange={(event) => { setTypingValue(convertRomajiInput(event.target.value)); setTypingResult('idle'); setRevealTypingAnswer(false); }} autoComplete="off" spellCheck={false} lang="ja" inputMode="text" placeholder="Kanji, Kana hoặc Romaji" className="min-w-0 flex-1 rounded-xl border border-blue-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 outline-none focus:border-blue-500 font-japanese disabled:opacity-70" />
                         <button className="px-5 py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black">Kiểm tra</button>
                       </form>
                       {typingResult === 'correct' && <div className="mt-3 rounded-xl bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 px-4 py-3 font-bold"><i className="fas fa-circle-check mr-2"></i>Chính xác! {data.word} · {data.reading}</div>}
-                      {typingResult === 'incorrect' && <div className="mt-3 rounded-xl bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 px-4 py-3"><b><i className="fas fa-circle-xmark mr-2"></i>Chưa đúng.</b> Đáp án: <span className="font-japanese font-black">{data.reading}</span></div>}
+                      {typingResult === 'incorrect' && <JapaneseAnswerFeedback input={submittedTypingValue} acceptedAnswers={acceptedTypingAnswers} revealAnswer={revealTypingAnswer} onRetry={() => { setTypingValue(''); setSubmittedTypingValue(''); setTypingResult('idle'); setRevealTypingAnswer(false); }} onReveal={() => setRevealTypingAnswer(true)} />}
                     </section>
-                    {politeConjugations.length > 0 && <section className="mb-5 rounded-2xl border border-orange-100 dark:border-orange-900/40 bg-orange-50/60 dark:bg-orange-900/10 p-4 sm:p-5">
-                      <button onClick={() => setShowConjugations((value) => !value)} className="w-full flex items-center justify-between text-left"><span><b><i className="fas fa-table-cells text-orange-500 mr-2"></i>Bảng chia thể lịch sự</b><span className="block text-xs text-slate-500 dark:text-slate-400 mt-1">Bấm để luyện dạng ます, phủ định và quá khứ.</span></span><i className={`fas fa-chevron-${showConjugations ? 'up' : 'down'} text-orange-500`}></i></button>
-                      {showConjugations && <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-4">{politeConjugations.map((form) => <button key={form.label} onClick={() => speak(form.value)} className="text-left bg-white dark:bg-slate-800 border border-orange-100 dark:border-slate-700 rounded-xl p-3"><span className="block text-[11px] uppercase font-black text-orange-500">{form.label}</span><span className="font-japanese text-xl font-black">{form.value}</span><i className="fas fa-volume-high float-right mt-1 text-orange-400"></i></button>)}</div>}
-                    </section>}
+                    <VocabularyGrammarPractice item={data} settings={props.settings} />
                     <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 text-amber-900 dark:text-amber-200 rounded-xl p-4"><i className="fas fa-lightbulb text-amber-500 mr-2"></i>Cách học nhanh: đọc to cụm/câu mẫu trước, tự tưởng tượng tình huống, rồi mới bấm 1/2/3 để lên lịch ôn.</div>
                   </div>
                 </div>

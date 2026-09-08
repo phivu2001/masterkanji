@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { vocabularyIdAliases } from '@/data/vocabulary';
 import {
   DEFAULT_SETTINGS,
   calculateStreak,
@@ -51,6 +52,33 @@ const persist = (key: string, value: unknown) => {
   localStorage.setItem(key, JSON.stringify(value));
 };
 
+const migrateVocabularyProgress = (progress: StudyProgress): StudyProgress => {
+  const migrated: StudyProgress = {};
+  Object.entries(progress).forEach(([sourceId, record]) => {
+    const id = vocabularyIdAliases.get(sourceId) ?? sourceId;
+    const existing = migrated[id];
+    if (!existing) {
+      migrated[id] = record;
+      return;
+    }
+    const statusRank = { learning: 0, hard: 1, learned: 2 } as const;
+    migrated[id] = {
+      ...record,
+      status: statusRank[existing.status] >= statusRank[record.status] ? existing.status : record.status,
+      repetitions: Math.max(existing.repetitions, record.repetitions),
+      intervalDays: Math.max(existing.intervalDays, record.intervalDays),
+      easeFactor: Math.max(existing.easeFactor, record.easeFactor),
+      dueAt: existing.dueAt < record.dueAt ? existing.dueAt : record.dueAt,
+      lastReviewedAt: [existing.lastReviewedAt, record.lastReviewedAt].filter((value): value is string => Boolean(value)).sort().at(-1) ?? null,
+      firstLearnedAt: [existing.firstLearnedAt, record.firstLearnedAt].filter((value): value is string => Boolean(value)).sort()[0] ?? null,
+      correctCount: existing.correctCount + record.correctCount,
+      incorrectCount: existing.incorrectCount + record.incorrectCount,
+      lapses: existing.lapses + record.lapses,
+    };
+  });
+  return migrated;
+};
+
 export function useStudyStore() {
   const [hydrated, setHydrated] = useState(false);
   const [progress, setProgress] = useState<StudyProgress>({});
@@ -65,7 +93,9 @@ export function useStudyStore() {
 
   const loadFromStorage = useCallback(() => {
     setProgress(normalizeProgress(readJson<unknown>(STORAGE.progress, {})));
-    setVocabularyProgress(normalizeProgress(readJson<unknown>(STORAGE.vocabularyProgress, {})));
+    const migratedVocabularyProgress = migrateVocabularyProgress(normalizeProgress(readJson<unknown>(STORAGE.vocabularyProgress, {})));
+    setVocabularyProgress(migratedVocabularyProgress);
+    persist(STORAGE.vocabularyProgress, migratedVocabularyProgress);
     setSettings({ ...DEFAULT_SETTINGS, ...readJson<Partial<StudySettings>>(STORAGE.settings, {}) });
     setFavorites(readJson<string[]>(STORAGE.favorites, []));
     const storedSets = readJson<PersonalSet[]>(STORAGE.sets, []);
@@ -127,8 +157,9 @@ export function useStudyStore() {
 
   const reviewVocabulary = useCallback((id: string, quality: ReviewQuality) => {
     const now = new Date();
+    const canonicalId = vocabularyIdAliases.get(id) ?? id;
     setVocabularyProgress((current) => {
-      const updated = { ...current, [id]: scheduleReview(current[id], quality, now) };
+      const updated = { ...current, [canonicalId]: scheduleReview(current[canonicalId], quality, now) };
       persist(STORAGE.vocabularyProgress, updated);
       return updated;
     });
@@ -258,7 +289,7 @@ export function useStudyStore() {
   const restoreBackup = useCallback((value: unknown) => {
     if (!isStudyBackup(value)) throw new Error('Tệp sao lưu không đúng định dạng KanjiMaster phiên bản 2.');
     const restoredProgress = normalizeProgress(value.progress);
-    const restoredVocabularyProgress = normalizeProgress(value.vocabularyProgress ?? {});
+    const restoredVocabularyProgress = migrateVocabularyProgress(normalizeProgress(value.vocabularyProgress ?? {}));
     const restoredSettings = { ...DEFAULT_SETTINGS, ...value.settings };
     setProgress(restoredProgress);
     setVocabularyProgress(restoredVocabularyProgress);

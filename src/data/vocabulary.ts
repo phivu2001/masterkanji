@@ -28,6 +28,8 @@ export type VocabularyInfo = {
   meaning: string;
   level: JLPTLevel;
   partOfSpeech: VocabularyPartOfSpeech;
+  adjectiveType?: 'i' | 'na';
+  lessonNumbers: number[];
   relatedKanji: VocabularyKanjiReference[];
   contexts: VocabularyContext[];
 };
@@ -6441,6 +6443,9 @@ const partOfSpeechOverrides = new Map<string, VocabularyPartOfSpeech>([
   ['ただいま', 'other'],
   ['心から', 'other'],
   ['お元気で', 'other'],
+  ['申し訳ありません', 'other'],
+  ['お待たせしました', 'other'],
+  ['かまいません', 'other'],
 ]);
 
 const animateNounWords = new Set([
@@ -6734,6 +6739,8 @@ const createVocabularyWithLesson = (
       meaning: item.meaning,
       level,
       partOfSpeech,
+      adjectiveType: partOfSpeech === 'adjective' ? (naAdjectiveWords.has(item.word) ? 'na' : 'i') : undefined,
+      lessonNumbers: [item.lesson],
       relatedKanji: getRelatedKanji(item.word),
       contexts: createVocabularyContexts(item, partOfSpeech),
     } satisfies VocabularyInfo,
@@ -6743,12 +6750,39 @@ const createVocabularyWithLesson = (
 const n5VocabularyWithLesson = createVocabularyWithLesson(rawMinnaN5Vocabulary, 'N5', 'minna-n5', 3);
 const n4VocabularyWithLesson = createVocabularyWithLesson(rawMinnaN4Vocabulary, 'N4', 'minna-n4', 4);
 
+type VocabularyWithLesson = (typeof n5VocabularyWithLesson)[number];
+
+const deduplicateVocabularyEntries = (entries: VocabularyWithLesson[]) => {
+  const canonicalByKey = new Map<string, VocabularyInfo>();
+  const aliases = new Map<string, string>();
+  const canonicalWords: VocabularyInfo[] = [];
+  const linkedEntries = entries.map((entry) => {
+    const key = `${entry.word.word}\u0000${entry.word.reading}`;
+    const existing = canonicalByKey.get(key);
+    if (existing) {
+      aliases.set(entry.word.id, existing.id);
+      if (!existing.lessonNumbers.includes(entry.lesson)) existing.lessonNumbers.push(entry.lesson);
+      return { lesson: entry.lesson, word: existing };
+    }
+    canonicalByKey.set(key, entry.word);
+    aliases.set(entry.word.id, entry.word.id);
+    canonicalWords.push(entry.word);
+    return entry;
+  });
+  return { linkedEntries, canonicalWords, aliases };
+};
+
+const n5Vocabulary = deduplicateVocabularyEntries(n5VocabularyWithLesson);
+const n4Vocabulary = deduplicateVocabularyEntries(n4VocabularyWithLesson);
+
+const uniqueWords = (items: VocabularyInfo[]) => [...new Map(items.map((item) => [item.id, item])).values()];
+
 const minnaN5VocabularyLessons: VocabularyLessonGroup[] = minnaN5LessonTitles
   .map((title, index) => ({
     level: 'N5' as JLPTLevel,
     lessonNumber: index + 1,
     title,
-    words: n5VocabularyWithLesson.filter((item) => item.lesson === index + 1).map((item) => item.word),
+    words: uniqueWords(n5Vocabulary.linkedEntries.filter((item) => item.lesson === index + 1).map((item) => item.word)),
   }))
   .filter((lesson) => lesson.words.length > 0);
 
@@ -6757,15 +6791,20 @@ const minnaN4VocabularyLessons: VocabularyLessonGroup[] = minnaN4LessonTitles
     level: 'N4' as JLPTLevel,
     lessonNumber: index + 26,
     title,
-    words: n4VocabularyWithLesson.filter((item) => item.lesson === index + 26).map((item) => item.word),
+    words: uniqueWords(n4Vocabulary.linkedEntries.filter((item) => item.lesson === index + 26).map((item) => item.word)),
   }))
   .filter((lesson) => lesson.words.length > 0);
 
 export const vocabularyData: VocabularyInfo[] = [
-  ...n5VocabularyWithLesson.map((item) => item.word),
-  ...n4VocabularyWithLesson.map((item) => item.word),
+  ...n5Vocabulary.canonicalWords,
+  ...n4Vocabulary.canonicalWords,
 ];
+export const vocabularyIdAliases = new Map([...n5Vocabulary.aliases, ...n4Vocabulary.aliases]);
 export const vocabularyById = new Map(vocabularyData.map((item) => [item.id, item]));
+vocabularyIdAliases.forEach((canonicalId, aliasId) => {
+  const canonical = vocabularyById.get(canonicalId);
+  if (canonical) vocabularyById.set(aliasId, canonical);
+});
 
 export const getVocabularyRouteLessons = (level: JLPTLevel, n4Only = false): VocabularyLessonGroup[] => {
   if (level === 'N5') return minnaN5VocabularyLessons;
@@ -6774,7 +6813,7 @@ export const getVocabularyRouteLessons = (level: JLPTLevel, n4Only = false): Voc
 };
 
 export const getVocabularyRouteData = (level: JLPTLevel, n4Only = false) => (
-  getVocabularyRouteLessons(level, n4Only).flatMap((lesson) => lesson.words)
+  uniqueWords(getVocabularyRouteLessons(level, n4Only).flatMap((lesson) => lesson.words))
 );
 
 export const getVocabularyByPartOfSpeech = (

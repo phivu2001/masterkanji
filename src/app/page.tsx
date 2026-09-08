@@ -74,7 +74,9 @@ export default function Home() {
       words: selectedVocabularyPartOfSpeech ? lesson.words.filter((item) => item.partOfSpeech === selectedVocabularyPartOfSpeech) : lesson.words,
     }))
     .filter((lesson) => lesson.words.length > 0), [selectedLevel, selectedVocabularyPartOfSpeech, store.settings.n4Only]);
-  const vocabularyRouteData = useMemo(() => vocabularyLessons.flatMap((lesson) => lesson.words), [vocabularyLessons]);
+  const vocabularyRouteData = useMemo(() => [...new Map(
+    vocabularyLessons.flatMap((lesson) => lesson.words).map((item) => [item.id, item]),
+  ).values()], [vocabularyLessons]);
   const vocabularySessionItems = useMemo(() => (vocabularyStudySession?.ids ?? []).map((id) => vocabularyById.get(id)).filter((item): item is VocabularyInfo => Boolean(item)), [vocabularyStudySession]);
   const allCoreData = useMemo(() => getJlptStudyOrder('N4').map((character) => kanjiByCharacter.get(character)).filter((item): item is KanjiInfo => Boolean(item)), []);
   const vocabularyCounts = useMemo(() => {
