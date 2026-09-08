@@ -1,17 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { HomeDashboard } from '@/components/HomeDashboard';
 import { LessonLibrary } from '@/components/LessonLibrary';
-import { QuizScreen } from '@/components/QuizScreen';
-import { SearchModal } from '@/components/SearchModal';
-import { StudyScreen } from '@/components/StudyScreen';
-import { VocabularyLibrary } from '@/components/VocabularyLibrary';
-import { VocabularyClozeScreen } from '@/components/VocabularyClozeScreen';
-import { VocabularyGameScreen } from '@/components/VocabularyGameScreen';
-import { VocabularyQuizScreen } from '@/components/VocabularyQuizScreen';
-import { VocabularyStudyScreen } from '@/components/VocabularyStudyScreen';
-import { VocabularyTypingScreen } from '@/components/VocabularyTypingScreen';
 import { kanjiData } from '@/data/kanji';
 import type { KanjiInfo } from '@/data/kanji';
 import { getJlptLessons, getJlptStudyOrder } from '@/data/jlptCore';
@@ -33,6 +25,17 @@ type RouteLesson = { level: JLPTLevel; title: string; items: KanjiInfo[] };
 
 const kanjiById = new Map(kanjiData.map((item) => [item.id, item]));
 const kanjiByCharacter = new Map(kanjiData.map((item) => [item.kanji, item]));
+
+const ScreenLoading = () => <div className="min-h-screen bg-slate-50 dark:bg-slate-900 flex items-center justify-center text-slate-500"><i className="fas fa-circle-notch fa-spin mr-2"></i>Đang mở chế độ học...</div>;
+const QuizScreen = dynamic(() => import('@/components/QuizScreen').then((module) => module.QuizScreen), { loading: ScreenLoading });
+const SearchModal = dynamic(() => import('@/components/SearchModal').then((module) => module.SearchModal));
+const StudyScreen = dynamic(() => import('@/components/StudyScreen').then((module) => module.StudyScreen), { loading: ScreenLoading });
+const VocabularyLibrary = dynamic(() => import('@/components/VocabularyLibrary').then((module) => module.VocabularyLibrary), { loading: ScreenLoading });
+const VocabularyClozeScreen = dynamic(() => import('@/components/VocabularyClozeScreen').then((module) => module.VocabularyClozeScreen), { loading: ScreenLoading });
+const VocabularyGameScreen = dynamic(() => import('@/components/VocabularyGameScreen').then((module) => module.VocabularyGameScreen), { loading: ScreenLoading });
+const VocabularyQuizScreen = dynamic(() => import('@/components/VocabularyQuizScreen').then((module) => module.VocabularyQuizScreen), { loading: ScreenLoading });
+const VocabularyStudyScreen = dynamic(() => import('@/components/VocabularyStudyScreen').then((module) => module.VocabularyStudyScreen), { loading: ScreenLoading });
+const VocabularyTypingScreen = dynamic(() => import('@/components/VocabularyTypingScreen').then((module) => module.VocabularyTypingScreen), { loading: ScreenLoading });
 
 const getRouteLessons = (level: JLPTLevel, n4Only: boolean): RouteLesson[] => getJlptLessons(level, n4Only)
   .map((lesson) => ({
@@ -444,5 +447,5 @@ export default function Home() {
     content = <LessonLibrary level={selectedLevel} levelData={routeData} lessonGroups={routeLessons} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onOpenVocabulary={() => selectVocabularyLevel(selectedLevel)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
   }
 
-  return <>{content}<SearchModal open={showSearch} data={kanjiData} favorites={store.favorites} onClose={() => setShowSearch(false)} onOpenKanji={openSearchResult} onToggleFavorite={store.toggleFavorite} />{notice && <div role="status" className="fixed z-[120] bottom-5 left-1/2 -translate-x-1/2 max-w-[90vw] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-3 rounded-xl shadow-2xl font-bold text-sm"><i className="fas fa-circle-check text-green-400 mr-2"></i>{notice}</div>}<input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => importBackup(event.target.files?.[0])} /></>;
+  return <>{content}{showSearch && <SearchModal open data={kanjiData} favorites={store.favorites} onClose={() => setShowSearch(false)} onOpenKanji={openSearchResult} onToggleFavorite={store.toggleFavorite} />}{notice && <div role="status" className="fixed z-[120] bottom-5 left-1/2 -translate-x-1/2 max-w-[90vw] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-3 rounded-xl shadow-2xl font-bold text-sm"><i className="fas fa-circle-check text-green-400 mr-2"></i>{notice}</div>}<input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => importBackup(event.target.files?.[0])} /></>;
 }

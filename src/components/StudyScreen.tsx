@@ -6,6 +6,8 @@ import { extraVocab } from '@/data/extraVocab';
 import { buildFallbackSentence, exampleSentences, similarKanjiGroups } from '@/data/kanjiLearningExtras';
 import { kanjiData } from '@/data/kanji';
 import type { KanjiInfo } from '@/data/kanji';
+import { useFlashcardSwipe } from '@/hooks/useFlashcardSwipe';
+import { useJapaneseSpeech } from '@/hooks/useJapaneseSpeech';
 import type { PersonalSet, ReviewQuality, StudyProgress, StudySettings, WritingScore } from '@/lib/study';
 import { formatDue, withoutRomaji } from '@/lib/study';
 
@@ -44,6 +46,11 @@ export function StudyScreen(props: Props) {
   const writerRef = useRef<HTMLDivElement>(null);
   const writerInstance = useRef<HanziWriter | null>(null);
   const data = props.items[props.currentIndex] ?? props.items[0];
+  const speak = useJapaneseSpeech(props.settings.speechRate);
+  const { consumeSwipe, ...flashcardSwipeHandlers } = useFlashcardSwipe(
+    () => { setIsFlipped(false); props.onPrevious(); },
+    () => { setIsFlipped(false); props.onNext(); },
+  );
 
   const initWriter = useCallback((kanji: string) => {
     if (!writerRef.current) return;
@@ -107,17 +114,6 @@ export function StudyScreen(props: Props) {
   }, [data, props]);
 
   if (!data) return null;
-
-  const speak = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ja-JP';
-    utterance.rate = props.settings.speechRate;
-    const voices = window.speechSynthesis.getVoices();
-    utterance.voice = voices.find((voice) => voice.lang === 'ja-JP') ?? voices.find((voice) => voice.lang.startsWith('ja')) ?? null;
-    window.speechSynthesis.speak(utterance);
-  };
 
   const record = props.progress[data.id];
   const vocabulary = [...data.vocabularies, ...(extraVocab[data.kanji] ?? []).filter((extra) => !data.vocabularies.some((item) => item.kanji === extra.kanji))];
@@ -190,7 +186,7 @@ export function StudyScreen(props: Props) {
 
             <aside className="space-y-5">
               <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><div className="flex justify-between mb-2 text-sm"><span>Tiến độ phiên</span><b>{props.currentIndex + 1}/{props.items.length}</b></div><div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-red-500" style={{ width: `${((props.currentIndex + 1) / props.items.length) * 100}%` }} /></div><p className="text-xs text-slate-400 mt-3">Phím tắt: ←/→ chuyển chữ, Space lật, 1/2/3 đánh giá, F yêu thích, L danh sách.</p></section>
-              <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><h3 className="font-black mb-4">Flashcard</h3><button onClick={() => setIsFlipped((value) => !value)} className="w-full h-64 perspective-1000"><span className={`relative block w-full h-full transition-transform duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}><span className="absolute inset-0 backface-hidden rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center"><span className="font-japanese text-7xl font-black">{data.kanji}</span><span className="text-xs text-slate-400 mt-3">Bấm hoặc Space để lật</span></span><span className="absolute inset-0 backface-hidden rotate-y-180 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><b className="uppercase text-xl">{data.hanviet}</b><span className="text-center text-sm mt-2">{data.meaning}</span><span className="text-xs text-slate-400 mt-4">{withoutRomaji(data.onyomi, props.settings.hideRomaji)}</span></span></span></button><div className="grid grid-cols-3 gap-2 mt-4"><button onClick={() => props.onRate('again')} className="py-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg font-bold">1 · Lại</button><button onClick={() => props.onRate('hard')} className="py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg font-bold">2 · Khó</button><button onClick={() => props.onRate('good')} className="py-2 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-lg font-bold">3 · Tốt</button></div></section>
+              <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><h3 className="font-black mb-4">Flashcard</h3><button {...flashcardSwipeHandlers} onClick={() => { if (!consumeSwipe()) setIsFlipped((value) => !value); }} className="w-full h-64 perspective-1000 touch-pan-y"><span className={`relative block w-full h-full transition-transform duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}><span className="absolute inset-0 backface-hidden rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center"><span className="font-japanese text-7xl font-black">{data.kanji}</span><span className="text-xs text-slate-400 mt-3">Bấm/Space để lật • Vuốt để chuyển</span></span><span className="absolute inset-0 backface-hidden rotate-y-180 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><b className="uppercase text-xl">{data.hanviet}</b><span className="text-center text-sm mt-2">{data.meaning}</span><span className="text-xs text-slate-400 mt-4">{withoutRomaji(data.onyomi, props.settings.hideRomaji)}</span></span></span></button><div className="grid grid-cols-3 gap-2 mt-4"><button onClick={() => props.onRate('again')} className="py-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg font-bold">1 · Lại</button><button onClick={() => props.onRate('hard')} className="py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg font-bold">2 · Khó</button><button onClick={() => props.onRate('good')} className="py-2 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-lg font-bold">3 · Tốt</button></div></section>
               <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5"><h3 className="font-black mb-3">Lịch sử ghi nhớ</h3><div className="grid grid-cols-2 gap-2 text-sm"><div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3"><div className="text-green-600 font-black text-xl">{record?.correctCount ?? 0}</div>Đúng</div><div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3"><div className="text-red-600 font-black text-xl">{record?.incorrectCount ?? 0}</div>Sai</div></div></section>
             </aside>
           </div>

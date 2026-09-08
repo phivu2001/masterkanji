@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import type { JLPTLevel } from '@/data/jlptCore';
 import type { VocabularyInfo } from '@/data/vocabulary';
 import { getVocabularyClozeExercises } from '@/data/vocabularyPractice';
+import { commitRomajiInput, convertRomajiInput, normalizeJapaneseAnswer } from '@/lib/japaneseInput';
 
 type Props = {
   pool: VocabularyInfo[];
@@ -17,13 +18,13 @@ type AnswerRecord = { wordId: string; correct: boolean };
 
 const shuffle = <T,>(items: T[]) => [...items].sort(() => Math.random() - 0.5);
 
-const normalizeAnswer = (value: string) => value
-  .normalize('NFKC')
-  .toLocaleLowerCase('ja-JP')
-  .replace(/[\s。、・]/g, '');
-
 export function VocabularyClozeScreen({ pool, level, title, onExit, onComplete }: Props) {
-  const exercises = useMemo(() => shuffle(getVocabularyClozeExercises(pool)).slice(0, 10), [pool]);
+  const exercises = useMemo(() => {
+    const available = getVocabularyClozeExercises(pool);
+    const curated = shuffle(available.filter((exercise) => exercise.source === 'curated')).slice(0, 10);
+    const generated = shuffle(available.filter((exercise) => exercise.source === 'generated')).slice(0, 10 - curated.length);
+    return shuffle([...curated, ...generated]);
+  }, [pool]);
   const [index, setIndex] = useState(0);
   const [value, setValue] = useState('');
   const [result, setResult] = useState<'idle' | 'correct' | 'incorrect'>('idle');
@@ -50,10 +51,11 @@ export function VocabularyClozeScreen({ pool, level, title, onExit, onComplete }
 
   const checkAnswer = () => {
     if (result !== 'idle' || !value.trim()) return;
-    const submitted = normalizeAnswer(value);
+    setValue(commitRomajiInput(value));
+    const submitted = normalizeJapaneseAnswer(value);
     const accepted = [current.item.word, current.item.reading]
       .flatMap((answer) => answer.split(/[／/]/))
-      .map(normalizeAnswer);
+      .map(normalizeJapaneseAnswer);
     const correct = accepted.includes(submitted);
     setResult(correct ? 'correct' : 'incorrect');
     setAnswers((items) => [...items, { wordId: current.item.id, correct }]);
@@ -100,11 +102,12 @@ export function VocabularyClozeScreen({ pool, level, title, onExit, onComplete }
         <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-700 overflow-hidden mb-6"><div className="h-full bg-amber-500" style={{ width: `${((index + 1) / exercises.length) * 100}%` }} /></div>
         <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-7 sm:p-10 shadow-sm">
           <div className="text-xs uppercase tracking-widest font-black text-amber-500 mb-4">Điền từ phù hợp vào ngữ cảnh</div>
+          <div className="mb-3"><span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] uppercase font-black ${current.source === 'curated' ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-300' : 'bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300'}`}>{current.source === 'curated' ? 'Câu biên soạn' : 'Câu tạo theo ngữ cảnh'}</span></div>
           <div className="font-japanese text-3xl sm:text-5xl font-black leading-relaxed mb-4">{current.blankSentence}</div>
           <p className="text-lg font-bold text-slate-600 dark:text-slate-300 mb-2">{current.meaning}</p>
           {showHint && <div className="rounded-xl bg-amber-50 dark:bg-amber-900/20 text-amber-800 dark:text-amber-200 px-4 py-3 mb-4"><span className="block text-xs font-black uppercase mb-1">Gợi ý cách đọc</span><span className="font-japanese">{blankReading}</span></div>}
           <form onSubmit={(event) => { event.preventDefault(); if (result === 'idle') checkAnswer(); else next(); }}>
-            <input autoFocus value={value} disabled={result !== 'idle'} onChange={(event) => setValue(event.target.value)} autoComplete="off" spellCheck={false} lang="ja" placeholder="Gõ từ bằng Kanji hoặc Kana..." className="w-full rounded-2xl border-2 border-amber-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 px-5 py-4 text-2xl font-japanese outline-none focus:border-amber-500 disabled:opacity-80" />
+            <input autoFocus value={value} disabled={result !== 'idle'} onChange={(event) => setValue(convertRomajiInput(event.target.value))} autoComplete="off" spellCheck={false} lang="ja" inputMode="text" placeholder="Gõ Romaji, Kana hoặc Kanji..." className="w-full rounded-2xl border-2 border-amber-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 px-5 py-4 text-2xl font-japanese outline-none focus:border-amber-500 disabled:opacity-80" />
             {result !== 'idle' && <div className={`mt-4 rounded-xl p-4 ${result === 'correct' ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' : 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'}`}>
               <b><i className={`fas ${result === 'correct' ? 'fa-circle-check' : 'fa-circle-xmark'} mr-2`}></i>{result === 'correct' ? 'Chính xác!' : 'Chưa đúng.'}</b>
               <div className="font-japanese text-xl font-black mt-2">{current.sentence}</div>

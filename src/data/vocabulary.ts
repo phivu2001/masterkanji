@@ -1,6 +1,7 @@
 import { kanjiData } from './kanji';
 import type { JLPTLevel } from './jlptCore';
 import { rawMinnaN4Vocabulary } from './vocabularyN4';
+import { minnaN5ReadingCorrections } from './vocabularyN5Corrections';
 
 export type VocabularyKanjiReference = {
   id: string;
@@ -6396,25 +6397,11 @@ const lowerFirst = (value: string) => (
   value.length === 0 ? value : value.charAt(0).toLocaleLowerCase('vi-VN') + value.slice(1)
 );
 
-const includesAny = (value: string, hints: string[]) => (
-  hints.some((hint) => value.toLocaleLowerCase('vi-VN').includes(hint))
-);
+const personMeaningPattern = /^(?:người|ngài|thầy|cô giáo|bác sĩ|giáo viên|học sinh|sinh viên|nhân viên|trẻ em|trẻ con|em bé|vợ(?:\s|,|$)|chồng(?:\s|,|$)|con trai|con gái|bố(?:\s|,|$)|mẹ(?:\s|,|$)|anh trai|chị gái|em trai|em gái|bạn trai|bạn gái|gia đình|cảnh sát|cháu(?:\s|,|$))/i;
 
-const personMeaningHints = [
-  'người', 'anh', 'chị', 'ông', 'bà', 'thầy', 'cô', 'bác sĩ', 'giáo viên',
-  'học sinh', 'sinh viên', 'bạn', 'nhân viên', 'trẻ em', 'vợ', 'chồng', 'con',
-];
+const placeMeaningPattern = /^(?:trường|bệnh viện|cửa hàng|ga(?:\s|,|$)|sân bay|phòng|lớp học|ngân hàng|bưu điện|công ty|đại học|quán|khách sạn|thành phố|địa điểm|thị trấn|thị xã)/i;
 
-const placeMeaningHints = [
-  'trường', 'nhà', 'bệnh viện', 'cửa hàng', 'ga', 'sân bay', 'phòng', 'lớp',
-  'ngân hàng', 'bưu điện', 'công ty', 'đại học', 'quán', 'khách sạn', 'nước',
-  'thành phố', 'địa điểm',
-];
-
-const timeMeaningHints = [
-  'ngày', 'tháng', 'năm', 'tuần', 'giờ', 'sáng', 'trưa', 'chiều', 'tối', 'hôm',
-  'phút', 'lần',
-];
+const timeMeaningPattern = /^(?:ngày|tháng|năm|tuần|giờ|buổi sáng|buổi trưa|buổi chiều|buổi tối|hôm|phút|lần(?:\s|,|$))/i;
 
 const questionStarters = [
   'いつ', 'どこ', 'だれ', 'どなた', 'どちら', 'どれ', 'どの', 'どう', 'どうして',
@@ -6423,7 +6410,7 @@ const questionStarters = [
 
 const naAdjectiveWords = new Set([
   'ハンサム', 'きれい', '静か', 'にぎやか', '有名', '親切', '元気', '暇', '便利',
-  'すてき', '好き', '嫌い', '上手', '下手', '簡単な', '大切', '大丈夫', '無理',
+  'すてき', '好き', '嫌い', '上手', '下手', '簡単', '大変', 'いろいろ', '大切', '大丈夫', '無理',
   '心配', '大好き', '不思議', 'まじめ', '熱心', '嫌', '十分', 'だめ', '必要',
   '特別', '豪華', '複雑', '邪魔', '伝統的', '真っ白', '丈夫', '変', '幸せ',
   '楽', '安全', '危険', '安心',
@@ -6444,8 +6431,132 @@ const fixedExpressionWords = new Set([
 
 const nonNounMeaningPattern = /^(vâng|dạ|không|xin|chào|cảm ơn|cám ơn|mời|rất|hơi|thường|hay |thỉnh thoảng|luôn|đôi khi|sắp|dần|đã |chưa|vẫn|lại |cùng|ngay|một chút|một ít|khoảng|hơn |nhất|thế nào|tại sao|ở đâu|ai |ai$|cái nào|như thế nào|vì |nhưng|và |hoặc|sau đó|trước hết|tiếp theo|được chứ|không sao|thật |ôi|a-lô|ừ|à|tự |ngoài ra)/i;
 
+const partOfSpeechOverrides = new Map<string, VocabularyPartOfSpeech>([
+  ['もし', 'other'],
+  ['いろいろ', 'adjective'],
+  ['ああ', 'other'],
+  ['みんなで', 'other'],
+  ['そんなに', 'other'],
+  ['あんなに', 'other'],
+  ['ただいま', 'other'],
+  ['心から', 'other'],
+  ['お元気で', 'other'],
+]);
+
+const animateNounWords = new Set([
+  'わたし', '私', 'あなた', 'あの人', 'あの方', '人', '方', '先生', '教師', '学生',
+  '会社員', '社員', '銀行員', '医者', '研究者', '友達', '彼', '彼女', '家族', '兄弟',
+  '父', '母', 'お父さん', 'お母さん', '兄', '姉', '弟', '妹', '夫', '主人', 'ご主人',
+  '奥さん', '妻', '家内', '男の人', '女の人', '男の子', '女の子', '子ども', '子供',
+  '赤ちゃん', '皆さん', '留学生', 'お年寄り', '警官', '警察官', '駅員', '看護師',
+  '犬', '猫', '鳥', '動物', '馬', '牛', '魚',
+  '夫/主人', '妻/家内', 'お兄さん', 'お姉さん', '弟さん', '妹さん', '君', '息子',
+  '息子さん', '娘', '娘さん', 'お子さん', '子どもたち', '子供たち', '恋人', '大勢',
+  '大人', 'お孫さん', 'おじさん', 'おばさん', '管理人', '二人', '男', '生徒', '小学生',
+  '大学生', '奥様', 'ヒト', 'ガイド', '相手',
+]);
+
+const placeNounWords = new Set([
+  'うち', '家', '国', '場所', '受付', '売り場', '町', '都会', '屋上', '駅前', 'お宅',
+  'ロシア', 'シンガポール', 'ベトナム', '日本', '韓国', '中国', 'アメリカ', 'イギリス',
+  'インド', 'インドネシア', 'タイ', 'ドイツ', 'フランス', 'ブラジル', 'イタリア',
+]);
+
+const placeWordEndingPattern = /(?:学校|大学|病院|駅|空港|銀行|郵便局|会社|教室|食堂|事務所|会議室|部屋|トイレ|店|ホテル|町|市|公園|寺|城|美術館|博物館|図書館|体育館|会場|工場|研究室|幼稚園|アパート|旅館)$/;
+
+const exactContextOverrides = new Map<string, VocabularyContext>([
+  ['わたし', {
+    title: 'Câu tự giới thiệu',
+    phrase: 'わたしはベトナム人です。',
+    reading: 'わたしはベトナムじんです。',
+    meaning: 'Tôi là người Việt Nam.',
+    hint: 'Đại từ chỉ người thường làm chủ đề với は trong câu tự giới thiệu.',
+  }],
+  ['あなた', {
+    title: 'Câu hỏi giao tiếp',
+    phrase: 'あなたは学生ですか。',
+    reading: 'あなたはがくせいですか。',
+    meaning: 'Bạn có phải là học sinh không?',
+    hint: 'Trong hội thoại thực tế, ưu tiên tên hoặc chức danh thay cho あなた khi đã biết người nghe.',
+  }],
+  ['これ', {
+    title: 'Chỉ đồ vật gần',
+    phrase: 'これはわたしの本です。',
+    reading: 'これはわたしのほんです。',
+    meaning: 'Đây là sách của tôi.',
+    hint: 'これ chỉ vật ở gần người nói và thường làm chủ đề với は.',
+  }],
+  ['それ', {
+    title: 'Chỉ đồ vật gần người nghe',
+    phrase: 'それは日本のカメラです。',
+    reading: 'それはにほんのカメラです。',
+    meaning: 'Đó là máy ảnh của Nhật.',
+    hint: 'それ chỉ vật ở gần người nghe.',
+  }],
+  ['あれ', {
+    title: 'Chỉ vật ở xa',
+    phrase: 'あれは学校です。',
+    reading: 'あれはがっこうです。',
+    meaning: 'Kia là trường học.',
+    hint: 'あれ chỉ vật hoặc nơi ở xa cả người nói lẫn người nghe.',
+  }],
+  ['桜', {
+    title: 'Ngữ cảnh thiên nhiên',
+    phrase: '公園に桜があります。',
+    reading: 'こうえんにさくらがあります。',
+    meaning: 'Trong công viên có cây hoa anh đào.',
+    hint: 'Cây cối dùng あります, không dùng います.',
+  }],
+  ['体', {
+    title: 'Cụm hành động',
+    phrase: '毎日、体を動かします。',
+    reading: 'まいにち、からだをうごかします。',
+    meaning: 'Hằng ngày tôi vận động cơ thể.',
+    hint: 'Học 体 cùng cụm 体を動かす để nhớ cách dùng tự nhiên.',
+  }],
+  ['田舎', {
+    title: 'Ngữ cảnh quê nhà',
+    phrase: '夏休みに田舎へ帰ります。',
+    reading: 'なつやすみにいなかへかえります。',
+    meaning: 'Kỳ nghỉ hè tôi về quê.',
+    hint: '田舎 thường đi với 帰る khi nói về quê nhà.',
+  }],
+]);
+
+const adjectiveMeaningOverrides = new Map<string, string>([
+  ['好き', 'Tôi rất thích điều này.'],
+  ['大好き', 'Tôi rất thích điều này.'],
+  ['嫌い', 'Tôi không thích điều này.'],
+  ['暇', 'Hiện tại tôi đang rảnh.'],
+  ['元気', 'Tôi rất khỏe.'],
+  ['簡単', 'Việc này rất đơn giản.'],
+  ['大変', 'Việc này rất vất vả.'],
+  ['いろいろ', 'Có nhiều loại khác nhau.'],
+]);
+
+const wordDisplayCorrections = new Map([
+  ['さくら大学富士大学', 'さくら大学・富士大学'],
+]);
+
+const normalizeVocabularyItem = (
+  item: RawVocabularyInfo,
+  index: number,
+  readingCorrections?: Readonly<Record<number, string>>,
+): RawVocabularyInfo => {
+  const stripNaSuffix = item.word === '簡単な' || item.word === '大変な';
+  const correctedWord = wordDisplayCorrections.get(item.word) ?? item.word;
+  return {
+    ...item,
+    word: stripNaSuffix ? correctedWord.slice(0, -1) : correctedWord,
+    reading: readingCorrections?.[index]
+      ?? (stripNaSuffix && item.reading.endsWith('な') ? item.reading.slice(0, -1) : item.reading),
+  };
+};
+
 const getVocabularyPartOfSpeech = (item: RawVocabularyInfo): VocabularyPartOfSpeech => {
   const { word, reading, meaning } = item;
+  const overriddenPartOfSpeech = partOfSpeechOverrides.get(word);
+  if (overriddenPartOfSpeech) return overriddenPartOfSpeech;
   const isFragment = /[～―－]/.test(word) || /[～―－]/.test(reading);
   const isFixedExpression = fixedExpressionWords.has(word)
     || /[。？！?]/.test(word)
@@ -6463,9 +6574,14 @@ const createVocabularyContexts = (item: RawVocabularyInfo, partOfSpeech: Vocabul
   const isFragment = /[～―－]/.test(word) || /[～―－]/.test(reading);
   const isFixedExpression = fixedExpressionWords.has(word) || /[。？！?]|です|ください|なさい/.test(word);
   const isQuestion = questionStarters.some((starter) => word.startsWith(starter) || reading.startsWith(starter));
-  const isPerson = includesAny(meaning, personMeaningHints);
-  const isPlace = includesAny(meaning, placeMeaningHints);
-  const isTime = includesAny(meaning, timeMeaningHints);
+  const normalizedMeaning = meaning.toLocaleLowerCase('vi-VN');
+  const isPerson = animateNounWords.has(word)
+    || (word !== 'たくさん' && /(?:人|者|員|さん|様)$/.test(word))
+    || personMeaningPattern.test(normalizedMeaning);
+  const isPlace = placeNounWords.has(word)
+    || placeWordEndingPattern.test(word)
+    || placeMeaningPattern.test(normalizedMeaning);
+  const isTime = timeMeaningPattern.test(normalizedMeaning);
 
   const contexts: VocabularyContext[] = [{
     title: 'Cụm gốc',
@@ -6531,7 +6647,7 @@ const createVocabularyContexts = (item: RawVocabularyInfo, partOfSpeech: Vocabul
       title: 'Mô tả nhanh',
       phrase: `${word}です。`,
       reading: `${reading}です。`,
-      meaning: `Thật ${lowerFirst(meaning)}.`,
+      meaning: adjectiveMeaningOverrides.get(word) ?? `Rất ${lowerFirst(meaning)}.`,
       hint: 'Tính từ dễ nhớ hơn khi học như một nhận xét ngắn: “...です”.',
     });
     return contexts;
@@ -6545,6 +6661,12 @@ const createVocabularyContexts = (item: RawVocabularyInfo, partOfSpeech: Vocabul
       meaning,
       hint: 'Học mục này như một trạng từ, từ nối hoặc cụm giao tiếp hoàn chỉnh trong tình huống phù hợp.',
     });
+    return contexts;
+  }
+
+  const exactContext = exactContextOverrides.get(word);
+  if (exactContext) {
+    contexts.push(exactContext);
     return contexts;
   }
 
@@ -6582,11 +6704,11 @@ const createVocabularyContexts = (item: RawVocabularyInfo, partOfSpeech: Vocabul
   }
 
   contexts.push({
-    title: 'Ngữ cảnh có/ở',
-    phrase: `${word}があります。`,
-    reading: `${reading}があります。`,
-    meaning: `Có ${lowerFirst(meaning)}.`,
-    hint: 'Danh từ đồ vật/khái niệm dễ nhớ hơn khi gắn với mẫu があります.',
+    title: 'Ngữ cảnh ghi nhớ',
+    phrase: `「${word}」という言葉を覚えます。`,
+    reading: `「${reading}」ということばをおぼえます。`,
+    meaning: `Tôi ghi nhớ từ “${lowerFirst(meaning)}”.`,
+    hint: 'Mẫu trung tính này dành cho danh từ chưa có câu ngữ cảnh biên soạn riêng.',
   });
   return contexts;
 };
@@ -6596,7 +6718,12 @@ const createVocabularyWithLesson = (
   level: JLPTLevel,
   idPrefix: string,
   idWidth: number,
-) => items.map((item, index) => {
+) => items.map((sourceItem, index) => {
+  const item = normalizeVocabularyItem(
+    sourceItem,
+    index,
+    level === 'N5' ? minnaN5ReadingCorrections : undefined,
+  );
   const partOfSpeech = getVocabularyPartOfSpeech(item);
   return {
     lesson: item.lesson,

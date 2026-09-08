@@ -2,6 +2,7 @@ import type { VocabularyInfo } from './vocabulary';
 
 export type VocabularyClozeExercise = {
   item: VocabularyInfo;
+  source: 'curated' | 'generated';
   sentence: string;
   blankSentence: string;
   reading: string;
@@ -9,7 +10,7 @@ export type VocabularyClozeExercise = {
   collocation: string;
 };
 
-type CuratedCloze = Omit<VocabularyClozeExercise, 'item' | 'blankSentence'>;
+type CuratedCloze = Omit<VocabularyClozeExercise, 'item' | 'blankSentence' | 'source'>;
 
 const curatedClozeByWord: Record<string, CuratedCloze> = {
   '食べます': { sentence: '毎朝、パンと卵を食べます。', reading: 'まいあさ、パンとたまごをたべます。', meaning: 'Mỗi sáng tôi ăn bánh mì và trứng.', collocation: '朝ご飯を食べます' },
@@ -64,11 +65,30 @@ const curatedClozeByWord: Record<string, CuratedCloze> = {
 
 export const getVocabularyClozeExercises = (pool: VocabularyInfo[]): VocabularyClozeExercise[] => {
   const seen = new Set<string>();
-  return pool.flatMap((item) => {
+  return pool.flatMap<VocabularyClozeExercise>((item) => {
+    if (seen.has(item.word)) return [];
     const cloze = curatedClozeByWord[item.word];
-    if (!cloze || seen.has(item.word) || !cloze.sentence.includes(item.word)) return [];
+    if (cloze?.sentence.includes(item.word)) {
+      seen.add(item.word);
+      return [{ ...cloze, source: 'curated' as const, item, blankSentence: cloze.sentence.replace(item.word, '＿＿＿') }];
+    }
+
+    const context = item.contexts.find((candidate) => (
+      candidate.phrase !== item.word
+      && candidate.phrase.includes(item.word)
+      && !/[～―－]/.test(candidate.phrase)
+    ));
+    if (!context) return [];
     seen.add(item.word);
-    return [{ ...cloze, item, blankSentence: cloze.sentence.replace(item.word, '＿＿＿') }];
+    return [{
+      item,
+      source: 'generated' as const,
+      sentence: context.phrase,
+      blankSentence: context.phrase.replace(item.word, '＿＿＿'),
+      reading: context.reading,
+      meaning: context.meaning,
+      collocation: context.phrase.replace(/[。？！?]/g, ''),
+    }];
   });
 };
 

@@ -7,13 +7,15 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
+    "data:vocabulary:n5-corrections": "node scripts/fetch-minna-n5-corrections.mjs",
     "data:vocabulary:n4": "node scripts/fetch-minna-n4.mjs"
   },
   "dependencies": {
     "hanzi-writer": "^3.7.3",
     "next": "16.3.2",
     "react": "19.2.8",
-    "react-dom": "19.2.8"
+    "react-dom": "19.2.8",
+    "wanakana": "^5.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

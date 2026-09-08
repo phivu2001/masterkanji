@@ -2,16 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import type { VocabularyInfo } from '@/data/vocabulary';
+import { useFlashcardSwipe } from '@/hooks/useFlashcardSwipe';
+import { useJapaneseSpeech } from '@/hooks/useJapaneseSpeech';
+import { commitRomajiInput, convertRomajiInput, normalizeJapaneseAnswer } from '@/lib/japaneseInput';
 import type { ReviewQuality, StudyProgress, StudySettings } from '@/lib/study';
 import { formatDue, withoutRomaji } from '@/lib/study';
 
 type TypingMode = 'meaning' | 'dictation';
 type TypingResult = 'idle' | 'correct' | 'incorrect';
-
-const normalizeTypingAnswer = (value: string) => value
-  .normalize('NFKC')
-  .toLocaleLowerCase('ja-JP')
-  .replace(/[\s。、・]/g, '');
 
 const partOfSpeechLabels = {
   verb: 'Động từ',
@@ -50,6 +48,7 @@ export function VocabularyStudyScreen(props: Props) {
   const [typingValue, setTypingValue] = useState('');
   const [typingResult, setTypingResult] = useState<TypingResult>('idle');
   const [showConjugations, setShowConjugations] = useState(false);
+  const speak = useJapaneseSpeech(props.settings.speechRate);
 
   const resetPracticeState = () => {
     setIsFlipped(false);
@@ -57,6 +56,10 @@ export function VocabularyStudyScreen(props: Props) {
     setTypingResult('idle');
     setShowConjugations(false);
   };
+  const { consumeSwipe, ...flashcardSwipeHandlers } = useFlashcardSwipe(
+    () => { resetPracticeState(); props.onPrevious(); },
+    () => { resetPracticeState(); props.onNext(); },
+  );
 
   const changeTypingMode = (mode: TypingMode) => {
     setTypingMode(mode);
@@ -82,23 +85,13 @@ export function VocabularyStudyScreen(props: Props) {
 
   if (!data) return null;
 
-  const speak = (text: string) => {
-    if (!('speechSynthesis' in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = 'ja-JP';
-    utterance.rate = props.settings.speechRate;
-    const voices = window.speechSynthesis.getVoices();
-    utterance.voice = voices.find((voice) => voice.lang === 'ja-JP') ?? voices.find((voice) => voice.lang.startsWith('ja')) ?? null;
-    window.speechSynthesis.speak(utterance);
-  };
-
   const checkTypingAnswer = () => {
-    const submitted = normalizeTypingAnswer(typingValue);
+    setTypingValue(commitRomajiInput(typingValue));
+    const submitted = normalizeJapaneseAnswer(typingValue);
     if (!submitted) return;
     const acceptedAnswers = [data.reading, data.word]
       .flatMap((answer) => answer.split(/[／/]/))
-      .map(normalizeTypingAnswer);
+      .map(normalizeJapaneseAnswer);
     setTypingResult(acceptedAnswers.includes(submitted) ? 'correct' : 'incorrect');
   };
 
@@ -193,7 +186,7 @@ export function VocabularyStudyScreen(props: Props) {
                       </div>
                       {typingMode === 'meaning' ? <div className="text-lg font-black mb-3">{data.meaning}</div> : <button onClick={() => speak(data.word)} className="mb-3 px-4 py-2 rounded-xl bg-blue-500 text-white font-bold"><i className="fas fa-volume-high mr-2"></i>Nghe lại từ</button>}
                       <form onSubmit={(event) => { event.preventDefault(); checkTypingAnswer(); }} className="flex flex-col sm:flex-row gap-2">
-                        <input value={typingValue} onChange={(event) => { setTypingValue(event.target.value); setTypingResult('idle'); }} autoComplete="off" spellCheck={false} placeholder="Gõ cách đọc bằng Kana hoặc mặt từ..." className="min-w-0 flex-1 rounded-xl border border-blue-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 outline-none focus:border-blue-500 font-japanese" />
+                        <input value={typingValue} onChange={(event) => { setTypingValue(convertRomajiInput(event.target.value)); setTypingResult('idle'); }} autoComplete="off" spellCheck={false} lang="ja" inputMode="text" placeholder="Gõ tabemasu → たべます" className="min-w-0 flex-1 rounded-xl border border-blue-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-3 outline-none focus:border-blue-500 font-japanese" />
                         <button className="px-5 py-3 rounded-xl bg-slate-900 dark:bg-white text-white dark:text-slate-900 font-black">Kiểm tra</button>
                       </form>
                       {typingResult === 'correct' && <div className="mt-3 rounded-xl bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 px-4 py-3 font-bold"><i className="fas fa-circle-check mr-2"></i>Chính xác! {data.word} · {data.reading}</div>}
@@ -211,7 +204,7 @@ export function VocabularyStudyScreen(props: Props) {
 
             <aside className="space-y-5">
               <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><div className="flex justify-between mb-2 text-sm"><span>Tiến độ phiên</span><b>{props.currentIndex + 1}/{props.items.length}</b></div><div className="h-2 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden"><div className="h-full bg-emerald-500" style={{ width: `${((props.currentIndex + 1) / props.items.length) * 100}%` }} /></div><p className="text-xs text-slate-400 mt-3">Phím tắt: ←/→ chuyển từ, Space lật, 1/2/3 đánh giá, L danh sách.</p></section>
-              <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><h3 className="font-black mb-4">Flashcard từ vựng</h3><button onClick={() => setIsFlipped((value) => !value)} className="w-full h-64 perspective-1000"><span className={`relative block w-full h-full transition-transform duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}><span className="absolute inset-0 backface-hidden rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><span className="font-japanese text-4xl font-black text-center">{data.word}</span><span className="text-xs text-slate-400 mt-3">Bấm hoặc Space để lật</span></span><span className="absolute inset-0 backface-hidden rotate-y-180 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><b className="text-xl text-center">{data.meaning}</b><span className="text-xs text-slate-400 mt-4">{withoutRomaji(data.reading, props.settings.hideRomaji)}</span></span></span></button><div className="grid grid-cols-3 gap-2 mt-4"><button onClick={() => { resetPracticeState(); props.onRate('again'); }} className="py-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg font-bold">1 · Lại</button><button onClick={() => { resetPracticeState(); props.onRate('hard'); }} className="py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg font-bold">2 · Khó</button><button onClick={() => { resetPracticeState(); props.onRate('good'); }} className="py-2 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-lg font-bold">3 · Tốt</button></div></section>
+              <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 shadow-sm"><h3 className="font-black mb-4">Flashcard từ vựng</h3><button {...flashcardSwipeHandlers} onClick={() => { if (!consumeSwipe()) setIsFlipped((value) => !value); }} className="w-full h-64 perspective-1000 touch-pan-y"><span className={`relative block w-full h-full transition-transform duration-500 transform-style-3d ${isFlipped ? 'rotate-y-180' : ''}`}><span className="absolute inset-0 backface-hidden rounded-2xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><span className="font-japanese text-4xl font-black text-center">{data.word}</span><span className="text-xs text-slate-400 mt-3">Bấm/Space để lật • Vuốt để chuyển</span></span><span className="absolute inset-0 backface-hidden rotate-y-180 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center p-5"><b className="text-xl text-center">{data.meaning}</b><span className="text-xs text-slate-400 mt-4">{withoutRomaji(data.reading, props.settings.hideRomaji)}</span></span></span></button><div className="grid grid-cols-3 gap-2 mt-4"><button onClick={() => { resetPracticeState(); props.onRate('again'); }} className="py-2 bg-red-50 dark:bg-red-900/20 text-red-600 rounded-lg font-bold">1 · Lại</button><button onClick={() => { resetPracticeState(); props.onRate('hard'); }} className="py-2 bg-blue-50 dark:bg-blue-900/20 text-blue-600 rounded-lg font-bold">2 · Khó</button><button onClick={() => { resetPracticeState(); props.onRate('good'); }} className="py-2 bg-green-50 dark:bg-green-900/20 text-green-600 rounded-lg font-bold">3 · Tốt</button></div></section>
               <section className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5"><h3 className="font-black mb-3">Lịch sử từ này</h3><div className="grid grid-cols-2 gap-2 text-sm"><div className="bg-green-50 dark:bg-green-900/20 rounded-lg p-3"><div className="text-green-600 font-black text-xl">{record?.correctCount ?? 0}</div>Đúng</div><div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-3"><div className="text-red-600 font-black text-xl">{record?.incorrectCount ?? 0}</div>Sai</div></div></section>
             </aside>
           </div>
