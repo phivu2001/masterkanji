@@ -7,6 +7,14 @@ export type GrammarForm = {
   reading: string;
 };
 
+export type VerbGroup = 'godan' | 'ichidan' | 'irregular';
+
+export const verbGroupLabels: Record<VerbGroup, string> = {
+  godan: 'Nhóm 1 · Godan',
+  ichidan: 'Nhóm 2 · Ichidan',
+  irregular: 'Nhóm 3 · Bất quy tắc',
+};
+
 const ichidanWords = new Set([
   '見ます', '起きます', '浴びます', '借ります', 'います', 'できます', '降ります',
   '足ります', '着ます', '似ます', '信じます', '感じます', '過ぎます', '落ちます',
@@ -33,19 +41,19 @@ const inflectPoliteVerb = (value: string, reading: string) => {
   const stem = value.slice(0, -2);
   const readingStem = reading.slice(0, -2);
   if (value.endsWith('来ます')) {
-    return { dictionary: `${stem}る`, negative: `${stem}ない`, te: `${stem}て`, readingDictionary: `${readingStem.slice(0, -1)}くる`, readingNegative: `${readingStem.slice(0, -1)}こない`, readingTe: `${readingStem.slice(0, -1)}きて` };
+    return { group: 'irregular' as const, dictionary: `${stem}る`, negative: `${stem}ない`, te: `${stem}て`, readingDictionary: `${readingStem.slice(0, -1)}くる`, readingNegative: `${readingStem.slice(0, -1)}こない`, readingTe: `${readingStem.slice(0, -1)}きて` };
   }
   if (value.endsWith('します')) {
     const valueBase = value.slice(0, -3);
     const readingBase = reading.slice(0, -3);
-    return { dictionary: `${valueBase}する`, negative: `${valueBase}しない`, te: `${valueBase}して`, readingDictionary: `${readingBase}する`, readingNegative: `${readingBase}しない`, readingTe: `${readingBase}して` };
+    return { group: 'irregular' as const, dictionary: `${valueBase}する`, negative: `${valueBase}しない`, te: `${valueBase}して`, readingDictionary: `${readingBase}する`, readingNegative: `${readingBase}しない`, readingTe: `${readingBase}して` };
   }
 
   const lastReadingStem = readingStem.at(-1) ?? '';
   const isEStem = /[えけげせぜてでねへべめれ]/.test(lastReadingStem);
   const isIchidan = ichidanWords.has(value) || isEStem;
   if (isIchidan) {
-    return { dictionary: `${stem}る`, negative: `${stem}ない`, te: `${stem}て`, readingDictionary: `${readingStem}る`, readingNegative: `${readingStem}ない`, readingTe: `${readingStem}て` };
+    return { group: 'ichidan' as const, dictionary: `${stem}る`, negative: `${stem}ない`, te: `${stem}て`, readingDictionary: `${readingStem}る`, readingNegative: `${readingStem}ない`, readingTe: `${readingStem}て` };
   }
 
   const dictionaryEnding = godanDictionaryEnding[lastReadingStem];
@@ -56,6 +64,7 @@ const inflectPoliteVerb = (value: string, reading: string) => {
   const negative = replaceLast(stem, negativeEnding);
   const te = replaceLast(stem, teEnding);
   return {
+    group: 'godan' as const,
     dictionary,
     negative,
     te,
@@ -63,6 +72,11 @@ const inflectPoliteVerb = (value: string, reading: string) => {
     readingNegative: replaceLast(readingStem, negativeEnding),
     readingTe: replaceLast(readingStem, teEnding),
   };
+};
+
+export const getVerbGroup = (item: VocabularyInfo): VerbGroup | null => {
+  if (item.partOfSpeech !== 'verb' || !item.word.endsWith('ます') || !item.reading.endsWith('ます')) return null;
+  return inflectPoliteVerb(item.word, item.reading)?.group ?? null;
 };
 
 export const getVerbForms = (item: VocabularyInfo): GrammarForm[] => {
@@ -116,7 +130,7 @@ export const getAdjectiveForms = (item: VocabularyInfo): GrammarForm[] => {
   if (isNa) return [
     { key: 'attributive', label: 'Đứng trước danh từ', value: `${item.word}な${companion.word}`, reading: `${item.reading}な${companion.reading}` },
     { key: 'present', label: 'Khẳng định', value: `${item.word}です`, reading: `${item.reading}です` },
-    { key: 'negative', label: 'Phủ định', value: `${item.word}ではありません`, reading: `${item.reading}ではありません` },
+    { key: 'negative', label: 'Phủ định', value: `${item.word}じゃない`, reading: `${item.reading}じゃない` },
     { key: 'past', label: 'Quá khứ', value: `${item.word}でした`, reading: `${item.reading}でした` },
   ];
   const exceptionalIi = item.word.endsWith('いい');
@@ -155,3 +169,26 @@ export const getNounParticleExercise = (item: VocabularyInfo): NounParticleExerc
     answers: ['を'],
   };
 };
+
+export type NounCounterExercise = {
+  sentence: string;
+  reading: string;
+  meaning: string;
+  answer: string;
+};
+
+const nounCounterExercises: Record<string, NounCounterExercise> = {
+  本: { sentence: '本を三＿買いました。', reading: 'ほんをさん＿かいました。', meaning: 'Tôi đã mua ba quyển sách.', answer: '冊' },
+  車: { sentence: '車が二＿あります。', reading: 'くるまがに＿あります。', meaning: 'Có hai chiếc ô tô.', answer: '台' },
+  シャツ: { sentence: 'シャツを二＿買いました。', reading: 'シャツをに＿かいました。', meaning: 'Tôi đã mua hai chiếc áo sơ mi.', answer: '枚' },
+  紙: { sentence: '紙を五＿ください。', reading: 'かみをご＿ください。', meaning: 'Cho tôi năm tờ giấy.', answer: '枚' },
+  りんご: { sentence: 'りんごを三＿食べました。', reading: 'りんごをさん＿たべました。', meaning: 'Tôi đã ăn ba quả táo.', answer: '個' },
+  鉛筆: { sentence: '鉛筆を二＿使います。', reading: 'えんぴつをに＿つかいます。', meaning: 'Tôi dùng hai cây bút chì.', answer: '本' },
+  靴: { sentence: '靴を一＿買いました。', reading: 'くつをいっ＿かいました。', meaning: 'Tôi đã mua một đôi giày.', answer: '足' },
+  コーヒー: { sentence: 'コーヒーを二＿飲みました。', reading: 'コーヒーをにはいのみました。', meaning: 'Tôi đã uống hai cốc cà phê.', answer: '杯' },
+  人: { sentence: '教室に学生が三＿います。', reading: 'きょうしつにがくせいがさんにんいます。', meaning: 'Trong lớp có ba học sinh.', answer: '人' },
+};
+
+export const getNounCounterExercise = (item: VocabularyInfo): NounCounterExercise | null => (
+  item.partOfSpeech === 'noun' ? nounCounterExercises[item.word] ?? null : null
+);
