@@ -21,6 +21,7 @@ type Props = {
   onStartTyping: (pool: VocabularyInfo[], title: string) => void;
   onStartCloze: (pool: VocabularyInfo[], title: string) => void;
   onStartGame: (pool: VocabularyInfo[], mode: 'speed' | 'relations', title: string) => void;
+  onStartConjugation: () => void;
 };
 
 const partOfSpeechLabels: Record<LearningVocabularyPartOfSpeech, string> = {
@@ -38,7 +39,7 @@ const filters: { id: VocabularyFilter; label: string; icon: string }[] = [
   { id: 'due', label: 'Đến hạn', icon: 'fa-bell' },
 ];
 
-export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, progress, onBack, onStartLesson, onStartReview, onStartQuiz, onStartTyping, onStartCloze, onStartGame }: Props) {
+export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, progress, onBack, onStartLesson, onStartReview, onStartQuiz, onStartTyping, onStartCloze, onStartGame, onStartConjugation }: Props) {
   const [filter, setFilter] = useState<VocabularyFilter>('all');
   const dueIds = words.filter((item) => isDue(progress[item.id])).map((item) => item.id);
   const learnedTotal = words.filter((item) => progress[item.id]?.status === 'learned').length;
@@ -76,7 +77,8 @@ export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, pr
 
         {words.length > 0 && <section className="mb-5">
           <div className="flex items-end justify-between gap-3 mb-3"><div><h2 className="text-lg font-black">Luyện tập chủ động</h2><p className="text-xs text-slate-500 dark:text-slate-400">Mỗi chế độ là một màn hình riêng, dùng đúng bộ từ đang mở.</p></div></div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <button onClick={onStartConjugation} className="text-left rounded-2xl border border-orange-100 dark:border-orange-900/40 bg-orange-50 dark:bg-orange-900/10 p-4 hover:border-orange-400 transition-colors"><span className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 text-white flex items-center justify-center mb-3"><i className="fas fa-fire"></i></span><b className="block">Đấu trường chia thể</b><span className="text-xs text-slate-500 dark:text-slate-400">Luyện tổng hợp động từ N5/N4</span></button>
             <button onClick={() => onStartTyping(words, `Luyện gõ ${libraryTitle}`)} className="text-left rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/10 p-4 hover:border-blue-400 transition-colors"><span className="w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center mb-3"><i className="fas fa-keyboard"></i></span><b className="block">Luyện gõ Kana</b><span className="text-xs text-slate-500 dark:text-slate-400">Nhìn nghĩa, tự gõ cách đọc</span></button>
             {clozeCount > 0 && <button onClick={() => onStartCloze(words, `Cloze Test ${libraryTitle}`)} className="text-left rounded-2xl border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-4 hover:border-amber-400 transition-colors"><span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center mb-3"><i className="fas fa-quote-right"></i></span><b className="block">Cloze thực tế</b><span className="text-xs text-slate-500 dark:text-slate-400">{clozeCount} câu khả dụng</span></button>}
             <button disabled={words.length < 4} onClick={() => onStartGame(words, 'speed', `Speed Matching ${libraryTitle}`)} className="text-left rounded-2xl border border-cyan-100 dark:border-cyan-900/40 bg-cyan-50 dark:bg-cyan-900/10 p-4 hover:border-cyan-400 disabled:opacity-40 transition-colors"><span className="w-10 h-10 rounded-xl bg-cyan-500 text-white flex items-center justify-center mb-3"><i className="fas fa-bolt"></i></span><b className="block">Nối từ tính giờ</b><span className="text-xs text-slate-500 dark:text-slate-400">Ghép từ với nghĩa thật nhanh</span></button>

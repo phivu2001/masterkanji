@@ -21,6 +21,17 @@ const ichidanWords = new Set([
   '閉じます', '存じます',
 ]);
 
+// Các động từ nhóm 1 kết thúc bằng âm す cũng có dạng lịch sự “...します”.
+// Không tách chúng như danh từ + します (nhóm 3).
+const godanSuWords = new Set([
+  'なくします', '下ろします', '出します', '回します', '思い出します', '押します',
+  '消します', '直します', '話します', '貸します', '返します', 'さします', 'だします',
+  '冷やします', '動かします', '壊します', '外します', '戻します', '指します',
+  '探します', '探します／捜します', '暮らします', '汚します', '沸かします',
+  '渡します', '生かします', '申します', '目指します', '落とします', '過ごします',
+  '降ろします', 'いたします', '失礼いたします',
+]);
+
 const godanDictionaryEnding: Record<string, string> = {
   い: 'う', き: 'く', ぎ: 'ぐ', し: 'す', ち: 'つ', に: 'ぬ', び: 'ぶ', み: 'む', り: 'る',
 };
@@ -40,10 +51,21 @@ const replaceLast = (value: string, replacement: string) => `${value.slice(0, -1
 const inflectPoliteVerb = (value: string, reading: string) => {
   const stem = value.slice(0, -2);
   const readingStem = reading.slice(0, -2);
+  if (['いらっしゃいます', 'くださいます', 'おっしゃいます', 'なさいます'].some((ending) => value.endsWith(ending))) {
+    return {
+      group: 'godan' as const,
+      dictionary: replaceLast(stem, 'る'),
+      negative: replaceLast(stem, 'らない'),
+      te: replaceLast(stem, 'って'),
+      readingDictionary: replaceLast(readingStem, 'る'),
+      readingNegative: replaceLast(readingStem, 'らない'),
+      readingTe: replaceLast(readingStem, 'って'),
+    };
+  }
   if (value.endsWith('来ます')) {
     return { group: 'irregular' as const, dictionary: `${stem}る`, negative: `${stem}ない`, te: `${stem}て`, readingDictionary: `${readingStem.slice(0, -1)}くる`, readingNegative: `${readingStem.slice(0, -1)}こない`, readingTe: `${readingStem.slice(0, -1)}きて` };
   }
-  if (value.endsWith('します')) {
+  if (value.endsWith('します') && !godanSuWords.has(value)) {
     const valueBase = value.slice(0, -3);
     const readingBase = reading.slice(0, -3);
     return { group: 'irregular' as const, dictionary: `${valueBase}する`, negative: `${valueBase}しない`, te: `${valueBase}して`, readingDictionary: `${readingBase}する`, readingNegative: `${readingBase}しない`, readingTe: `${readingBase}して` };

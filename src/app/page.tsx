@@ -8,12 +8,13 @@ import { kanjiData } from '@/data/kanji';
 import type { KanjiInfo } from '@/data/kanji';
 import { getJlptLessons, getJlptStudyOrder } from '@/data/jlptCore';
 import type { JLPTLevel } from '@/data/jlptCore';
-import { getVocabularyByPartOfSpeech, getVocabularyRouteData, getVocabularyRouteLessons, vocabularyById } from '@/data/vocabulary';
+import { getVocabularyByPartOfSpeech, getVocabularyRouteData, getVocabularyRouteLessons, vocabularyById, vocabularyData } from '@/data/vocabulary';
 import type { LearningVocabularyPartOfSpeech, VocabularyInfo } from '@/data/vocabulary';
 import { useStudyStore } from '@/hooks/useStudyStore';
 import { isDue, type PersonalSet, type ReviewQuality } from '@/lib/study';
+import type { ConjugationDrillConfig } from '@/lib/conjugationDrill';
 
-type AppView = 'home' | 'lessons' | 'study' | 'quiz' | 'vocabulary' | 'vocabularyStudy' | 'vocabularyQuiz' | 'vocabularyTyping' | 'vocabularyCloze' | 'vocabularyGame';
+type AppView = 'home' | 'lessons' | 'study' | 'quiz' | 'vocabulary' | 'vocabularyStudy' | 'vocabularyQuiz' | 'vocabularyTyping' | 'vocabularyCloze' | 'vocabularyGame' | 'conjugationDrill';
 type StudySource = 'lesson' | 'review' | 'favorites' | 'personal' | 'search' | 'filtered';
 type StudySession = { ids: string[]; label: string; source: StudySource; lessonIndex: number | null };
 type QuizSession = { pool: KanjiInfo[]; mode: 'practice' | 'exam'; questionCount?: number; title?: string };
@@ -36,6 +37,8 @@ const VocabularyGameScreen = dynamic(() => import('@/components/VocabularyGameSc
 const VocabularyQuizScreen = dynamic(() => import('@/components/VocabularyQuizScreen').then((module) => module.VocabularyQuizScreen), { loading: ScreenLoading });
 const VocabularyStudyScreen = dynamic(() => import('@/components/VocabularyStudyScreen').then((module) => module.VocabularyStudyScreen), { loading: ScreenLoading });
 const VocabularyTypingScreen = dynamic(() => import('@/components/VocabularyTypingScreen').then((module) => module.VocabularyTypingScreen), { loading: ScreenLoading });
+const BulkConjugationModal = dynamic(() => import('@/components/BulkConjugationModal').then((module) => module.BulkConjugationModal));
+const BulkConjugationScreen = dynamic(() => import('@/components/BulkConjugationScreen').then((module) => module.BulkConjugationScreen), { loading: ScreenLoading });
 
 const getRouteLessons = (level: JLPTLevel, n4Only: boolean): RouteLesson[] => getJlptLessons(level, n4Only)
   .map((lesson) => ({
@@ -59,6 +62,8 @@ export default function Home() {
   const [vocabularyIndex, setVocabularyIndex] = useState(0);
   const [vocabularyQuizSession, setVocabularyQuizSession] = useState<VocabularyQuizSession | null>(null);
   const [vocabularyActivitySession, setVocabularyActivitySession] = useState<VocabularyActivitySession | null>(null);
+  const [conjugationConfig, setConjugationConfig] = useState<ConjugationDrillConfig | null>(null);
+  const [showConjugationModal, setShowConjugationModal] = useState(false);
   const [showSearch, setShowSearch] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [notice, setNotice] = useState('');
@@ -366,6 +371,30 @@ export default function Home() {
     setView('vocabulary');
   };
 
+  const startConjugationDrill = (config: ConjugationDrillConfig) => {
+    setConjugationConfig(config);
+    setShowConjugationModal(false);
+    setView('conjugationDrill');
+  };
+
+  const completeConjugationDrill = (result: { score: number; total: number; wrongIds: string[] }) => {
+    if (result.total === 0) return;
+    const historyLevel = conjugationConfig?.level === 'N4' ? 'N4' : conjugationConfig?.level === 'N5' ? 'N5' : selectedLevel;
+    store.addQuizHistory({ level: historyLevel, score: result.score, total: result.total, mode: 'practice', scope: 'vocabulary' });
+    result.wrongIds.forEach((id) => store.reviewVocabulary(id, 'again'));
+  };
+
+  const leaveConjugationDrill = (destination: 'vocabulary' | 'home') => {
+    setConjugationConfig(null);
+    setView(destination);
+  };
+
+  const configureNewConjugationSession = () => {
+    setConjugationConfig(null);
+    setView('vocabulary');
+    setShowConjugationModal(true);
+  };
+
   const openSearchResult = (item: KanjiInfo) => {
     setSelectedLevel(item.level);
     setStudySession({ ids: [item.id], label: item.isSupplemental ? 'Kanji mở rộng' : 'Kết quả tra cứu', source: 'search', lessonIndex: null });
@@ -432,7 +461,9 @@ export default function Home() {
   } else if (view === 'quiz' && quizSession) {
     content = <QuizScreen pool={quizSession.pool} level={selectedLevel} mode={quizSession.mode} requestedQuestionCount={quizSession.questionCount} title={quizSession.title} settings={store.settings} onExit={() => { setQuizSession(null); setView('lessons'); }} onComplete={completeQuiz} />;
   } else if (view === 'vocabulary') {
-    content = <VocabularyLibrary level={selectedLevel} words={vocabularyRouteData} lessonGroups={vocabularyLessons} partOfSpeech={selectedVocabularyPartOfSpeech} progress={store.vocabularyProgress} onBack={() => setView('home')} onStartLesson={openVocabularyLesson} onStartReview={startVocabularyReview} onStartQuiz={startVocabularyQuiz} onStartTyping={(pool, title) => startVocabularyActivity(pool, 'typing', title)} onStartCloze={(pool, title) => startVocabularyActivity(pool, 'cloze', title)} onStartGame={(pool, mode, title) => startVocabularyActivity(pool, mode, title)} />;
+    content = <VocabularyLibrary level={selectedLevel} words={vocabularyRouteData} lessonGroups={vocabularyLessons} partOfSpeech={selectedVocabularyPartOfSpeech} progress={store.vocabularyProgress} onBack={() => setView('home')} onStartLesson={openVocabularyLesson} onStartReview={startVocabularyReview} onStartQuiz={startVocabularyQuiz} onStartTyping={(pool, title) => startVocabularyActivity(pool, 'typing', title)} onStartCloze={(pool, title) => startVocabularyActivity(pool, 'cloze', title)} onStartGame={(pool, mode, title) => startVocabularyActivity(pool, mode, title)} onStartConjugation={() => setShowConjugationModal(true)} />;
+  } else if (view === 'conjugationDrill' && conjugationConfig) {
+    content = <BulkConjugationScreen pool={vocabularyData} config={conjugationConfig} settings={store.settings} onExit={() => leaveConjugationDrill('vocabulary')} onHome={() => leaveConjugationDrill('home')} onNewSession={configureNewConjugationSession} onComplete={completeConjugationDrill} />;
   } else if (view === 'vocabularyQuiz' && vocabularyQuizSession) {
     content = <VocabularyQuizScreen pool={vocabularyQuizSession.pool} level={selectedLevel} mode={vocabularyQuizSession.mode} requestedQuestionCount={vocabularyQuizSession.questionCount} title={vocabularyQuizSession.title} settings={store.settings} onExit={() => { setVocabularyQuizSession(null); setView('vocabulary'); }} onComplete={completeVocabularyQuiz} />;
   } else if (view === 'vocabularyTyping' && vocabularyActivitySession?.mode === 'typing') {
@@ -449,5 +480,5 @@ export default function Home() {
     content = <LessonLibrary level={selectedLevel} levelData={routeData} lessonGroups={routeLessons} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onOpenVocabulary={() => selectVocabularyLevel(selectedLevel)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
   }
 
-  return <>{content}{showSearch && <SearchModal open data={kanjiData} favorites={store.favorites} onClose={() => setShowSearch(false)} onOpenKanji={openSearchResult} onToggleFavorite={store.toggleFavorite} />}{notice && <div role="status" className="fixed z-[120] bottom-5 left-1/2 -translate-x-1/2 max-w-[90vw] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-3 rounded-xl shadow-2xl font-bold text-sm"><i className="fas fa-circle-check text-green-400 mr-2"></i>{notice}</div>}<input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => importBackup(event.target.files?.[0])} /></>;
+  return <>{content}{showSearch && <SearchModal open data={kanjiData} favorites={store.favorites} onClose={() => setShowSearch(false)} onOpenKanji={openSearchResult} onToggleFavorite={store.toggleFavorite} />}{showConjugationModal && <BulkConjugationModal initialLevel={selectedLevel} pool={vocabularyData} onClose={() => setShowConjugationModal(false)} onStart={startConjugationDrill} />}{notice && <div role="status" className="fixed z-[120] bottom-5 left-1/2 -translate-x-1/2 max-w-[90vw] bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-5 py-3 rounded-xl shadow-2xl font-bold text-sm"><i className="fas fa-circle-check text-green-400 mr-2"></i>{notice}</div>}<input ref={importInputRef} type="file" accept="application/json" className="hidden" onChange={(event) => importBackup(event.target.files?.[0])} /></>;
 }
