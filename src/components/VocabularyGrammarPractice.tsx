@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { VocabularyInfo } from '@/data/vocabulary';
 import { useJapaneseSpeech } from '@/hooks/useJapaneseSpeech';
 import { analyzeJapaneseAnswer, commitRomajiInput, convertRomajiInput } from '@/lib/japaneseInput';
-import { getAdjectiveForms, getNounParticleExercise, getTransitivityPair, getVerbForms } from '@/lib/japaneseGrammar';
+import { getAdjectiveForms, getNounCounterExercise, getNounParticleExercise, getTransitivityPair, getVerbForms, getVerbGroup, verbGroupLabels } from '@/lib/japaneseGrammar';
 import type { StudySettings } from '@/lib/study';
 import { JapaneseAnswerFeedback } from './JapaneseAnswerFeedback';
 
@@ -14,10 +14,13 @@ type Props = {
 };
 
 const particles = ['は', 'が', 'を', 'に', 'で', 'へ'];
+const counters = ['冊', '台', '枚', '本', '個', '人', '足', '杯'];
 
 export function VocabularyGrammarPractice({ item, settings }: Props) {
   const forms = useMemo(() => item.partOfSpeech === 'verb' ? getVerbForms(item) : getAdjectiveForms(item), [item]);
   const particleExercise = useMemo(() => getNounParticleExercise(item), [item]);
+  const counterExercise = useMemo(() => getNounCounterExercise(item), [item]);
+  const verbGroup = useMemo(() => getVerbGroup(item), [item]);
   const [formIndex, setFormIndex] = useState(0);
   const [value, setValue] = useState('');
   const [submitted, setSubmitted] = useState('');
@@ -27,6 +30,9 @@ export function VocabularyGrammarPractice({ item, settings }: Props) {
   const [particleValue, setParticleValue] = useState('');
   const [particleResult, setParticleResult] = useState<'idle' | 'correct' | 'incorrect'>('idle');
   const [revealParticle, setRevealParticle] = useState(false);
+  const [counterValue, setCounterValue] = useState('');
+  const [counterResult, setCounterResult] = useState<'idle' | 'correct' | 'incorrect'>('idle');
+  const [revealCounter, setRevealCounter] = useState(false);
   const speak = useJapaneseSpeech(settings.speechRate);
   const activeForm = forms[formIndex] ?? forms[0];
   const transitivity = forms.length > 0 ? getTransitivityPair(forms[0].value) : null;
@@ -45,6 +51,9 @@ export function VocabularyGrammarPractice({ item, settings }: Props) {
       setParticleValue('');
       setParticleResult('idle');
       setRevealParticle(false);
+      setCounterValue('');
+      setCounterResult('idle');
+      setRevealCounter(false);
       setShowReference(false);
     });
     return () => cancelAnimationFrame(frame);
@@ -68,6 +77,13 @@ export function VocabularyGrammarPractice({ item, settings }: Props) {
     setParticleResult(particleExercise.answers.includes(normalized) ? 'correct' : 'incorrect');
   };
 
+  const checkCounter = (candidate = counterValue) => {
+    if (!counterExercise || !candidate.trim()) return;
+    const normalized = candidate.trim();
+    setCounterValue(normalized);
+    setCounterResult(normalized === counterExercise.answer ? 'correct' : 'incorrect');
+  };
+
   if (forms.length === 0 && !particleExercise) return null;
 
   if (particleExercise) {
@@ -87,6 +103,15 @@ export function VocabularyGrammarPractice({ item, settings }: Props) {
         </form>
         {particleResult === 'correct' && <div className="mt-3 rounded-xl bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 p-3 font-bold"><i className="fas fa-circle-check mr-2"></i>Đúng! Trợ từ {particleValue} phù hợp với câu này.</div>}
         {particleResult === 'incorrect' && <div className="mt-3 rounded-xl bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-3"><b>Bạn đã chọn:</b> <span className="font-japanese text-xl">{particleValue}</span><div className="mt-3 flex gap-2"><button type="button" onClick={() => { setParticleValue(''); setParticleResult('idle'); setRevealParticle(false); }} className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold">Thử lại</button>{!revealParticle && <button type="button" onClick={() => setRevealParticle(true)} className="px-4 py-2 rounded-lg bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800 font-bold">Xem đáp án</button>}</div>{revealParticle && <div className="mt-3 font-bold">Đáp án: <span className="font-japanese text-xl">{particleExercise.answers.join(' hoặc ')}</span></div>}</div>}
+        {counterExercise && <div className="mt-5 border-t border-violet-200 dark:border-violet-900/50 pt-5">
+          <h4 className="font-black"><i className="fas fa-arrow-up-1-9 text-fuchsia-500 mr-2"></i>Luyện lượng từ</h4>
+          <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Chọn lượng từ phù hợp với danh từ đang học.</p>
+          <div className="mt-3 rounded-xl bg-white dark:bg-slate-800 p-4"><div className="font-japanese text-2xl font-black">{counterExercise.sentence}</div><div className="text-xs text-slate-500 mt-1">{counterExercise.reading}</div><div className="text-sm font-bold mt-2">{counterExercise.meaning}</div></div>
+          <div className="mt-3 grid grid-cols-4 sm:grid-cols-8 gap-2">{counters.map((counter) => <button key={counter} type="button" disabled={counterResult === 'correct' || revealCounter} onClick={() => checkCounter(counter)} className={`py-2 rounded-xl border font-japanese text-lg font-black ${counterValue === counter ? 'border-fuchsia-500 bg-fuchsia-500 text-white' : 'border-violet-100 dark:border-slate-700 bg-white dark:bg-slate-800'}`}>{counter}</button>)}</div>
+          <form onSubmit={(event) => { event.preventDefault(); checkCounter(); }} className="mt-3 flex gap-2"><input value={counterValue} disabled={counterResult === 'correct' || revealCounter} onChange={(event) => { setCounterValue(event.target.value); setCounterResult('idle'); }} maxLength={1} aria-label="Nhập lượng từ" className="w-20 rounded-xl border border-fuchsia-200 dark:border-slate-600 bg-white dark:bg-slate-900 px-4 py-2 text-center font-japanese text-xl" /><button className="px-4 py-2 rounded-xl bg-fuchsia-600 text-white font-black">Kiểm tra</button></form>
+          {counterResult === 'correct' && <div className="mt-3 rounded-xl bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 p-3 font-bold"><i className="fas fa-circle-check mr-2"></i>Đúng! {item.word} dùng lượng từ <span className="font-japanese text-xl">{counterExercise.answer}</span> trong câu này.</div>}
+          {counterResult === 'incorrect' && <div className="mt-3 rounded-xl bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-3"><b>Bạn đã chọn:</b> <span className="font-japanese text-xl">{counterValue}</span><div className="mt-3 flex gap-2"><button type="button" onClick={() => { setCounterValue(''); setCounterResult('idle'); setRevealCounter(false); }} className="px-4 py-2 rounded-lg bg-red-600 text-white font-bold">Thử lại</button>{!revealCounter && <button type="button" onClick={() => setRevealCounter(true)} className="px-4 py-2 rounded-lg bg-white dark:bg-slate-800 border border-red-200 dark:border-red-800 font-bold">Xem đáp án</button>}</div>{revealCounter && <div className="mt-3 font-bold">Đáp án: <span className="font-japanese text-xl">{counterExercise.answer}</span></div>}</div>}
+        </div>}
       </section>
     );
   }
@@ -95,7 +120,7 @@ export function VocabularyGrammarPractice({ item, settings }: Props) {
     <section className="mb-5 rounded-2xl border border-orange-100 dark:border-orange-900/40 bg-orange-50/60 dark:bg-orange-900/10 p-4 sm:p-5">
       <h3 className="font-black"><i className="fas fa-table-cells text-orange-500 mr-2"></i>{item.partOfSpeech === 'verb' ? 'Luyện biến đổi động từ' : `Luyện tính từ ${item.adjectiveType === 'na' ? 'な' : 'い'}`}</h3>
       <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">Chọn một dạng rồi tự gõ đáp án trước khi mở bảng tham khảo.</p>
-      {transitivity && <div className="mt-3 inline-flex rounded-full bg-orange-100 dark:bg-orange-900/30 px-3 py-1 text-xs font-black text-orange-700 dark:text-orange-300">{transitivity.type} · Cặp tương ứng: <span className="font-japanese ml-1">{transitivity.counterpart}</span></div>}
+      {(verbGroup || transitivity) && <div className="mt-3 flex flex-wrap gap-2">{verbGroup && <div className="inline-flex rounded-full bg-amber-100 dark:bg-amber-900/30 px-3 py-1 text-xs font-black text-amber-700 dark:text-amber-300">{verbGroupLabels[verbGroup]}</div>}{transitivity && <div className="inline-flex rounded-full bg-orange-100 dark:bg-orange-900/30 px-3 py-1 text-xs font-black text-orange-700 dark:text-orange-300">{transitivity.type} · Cặp tương ứng: <span className="font-japanese ml-1">{transitivity.counterpart}</span></div>}</div>}
       <div className="mt-4 flex gap-2 overflow-x-auto pb-2">{forms.map((form, index) => <button key={form.key} type="button" onClick={() => resetForm(index)} className={`shrink-0 px-3 py-2 rounded-lg text-xs font-black ${formIndex === index ? 'bg-orange-500 text-white' : 'bg-white dark:bg-slate-800 border border-orange-100 dark:border-slate-700'}`}>{form.label}</button>)}</div>
       {activeForm && <div className="mt-2 rounded-xl bg-white dark:bg-slate-800 p-4"><div className="text-xs uppercase tracking-wider font-black text-orange-500">Hãy nhập: {activeForm.label}</div><div className="mt-1 font-bold">{item.meaning}</div><form onSubmit={(event) => { event.preventDefault(); checkForm(); }} className="mt-3 flex flex-col sm:flex-row gap-2"><input value={value} disabled={result === 'correct' || revealAnswer} onChange={(event) => { setValue(convertRomajiInput(event.target.value)); setResult('idle'); }} placeholder="Kanji, Kana hoặc Romaji" className="min-w-0 flex-1 rounded-xl border border-orange-200 dark:border-slate-600 bg-slate-50 dark:bg-slate-900 px-4 py-3 font-japanese" /><button className="px-5 py-3 rounded-xl bg-orange-500 text-white font-black">Kiểm tra</button></form></div>}
       {result === 'correct' && activeForm && <div className="mt-3 rounded-xl bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300 p-3 font-bold"><i className="fas fa-circle-check mr-2"></i>Chính xác: <span className="font-japanese text-xl">{activeForm.value}</span></div>}
