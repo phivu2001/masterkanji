@@ -1,11 +1,29 @@
 "use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ShadowingLessonEditor } from '@/components/ShadowingLessonEditor';
 import { VideoShadowingPlayer } from '@/components/VideoShadowingPlayer';
+import bundledShadowingLessons from '@/data/shadowingLessons.json';
 import { createShadowingSrtFileName, parseYouTubeVideoId, sanitizeShadowingLessons, serializeShadowingSrt, type ShadowingLesson, type ShadowingLevel, type ShadowingTopic } from '@/lib/shadowing';
 
 const STORAGE_KEY = 'kanjiMaster.shadowingLessons.v1';
+const PROJECT_STORE_URL = 'http://127.0.0.1:3200/shadowing-lessons';
+type ProjectSyncState = 'checking' | 'syncing' | 'synced' | 'browser-only';
+
+const mergeLessonLibraries = (...libraries: ShadowingLesson[][]) => {
+  const merged = new Map<string, ShadowingLesson>();
+  libraries.flat().forEach((lesson) => {
+    const current = merged.get(lesson.id);
+    if (!current || lesson.updatedAt >= current.updatedAt) merged.set(lesson.id, lesson);
+  });
+  return [...merged.values()].sort((a, b) => b.updatedAt - a.updatedAt);
+};
+
+const canUseProjectStore = () => (
+  typeof window !== 'undefined'
+  && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+  && /^31\d{2}$/u.test(window.location.port)
+);
 const topicFilters: Array<{ id: ShadowingTopic | 'Toàn bộ'; icon: string; active: string }> = [
   { id: 'Toàn bộ', icon: 'fa-table-cells-large', active: 'bg-slate-800 text-white border-slate-800' },
   { id: 'Mới bắt đầu', icon: 'fa-seedling', active: 'bg-blue-500 text-white border-blue-500' },
@@ -25,8 +43,11 @@ type Props = {
 };
 
 export function ShadowingHub({ onBack }: Props) {
+  const bundledLessons = useMemo(() => sanitizeShadowingLessons(bundledShadowingLessons), []);
+  const projectSyncQueueRef = useRef<Promise<void>>(Promise.resolve());
   const [lessons, setLessons] = useState<ShadowingLesson[]>([]);
   const [hydrated, setHydrated] = useState(false);
+  const [projectSyncState, setProjectSyncState] = useState<ProjectSyncState>('checking');
   const [levelFilter, setLevelFilter] = useState<ShadowingLevel | 'Tất cả'>('Tất cả');
   const [topicFilter, setTopicFilter] = useState<ShadowingTopic | 'Toàn bộ'>('Toàn bộ');
   const [hubTab, setHubTab] = useState<HubTab>('library');
@@ -41,17 +62,36 @@ export function ShadowingHub({ onBack }: Props) {
   const [localFiles, setLocalFiles] = useState<Record<string, File>>({});
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
+    let cancelled = false;
+    const hydrateLibrary = async () => {
+      let browserLessons: ShadowingLesson[] = [];
       try {
         const stored = localStorage.getItem(STORAGE_KEY);
-        setLessons(stored ? sanitizeShadowingLessons(JSON.parse(stored)) : []);
+        browserLessons = stored ? sanitizeShadowingLessons(JSON.parse(stored)) : [];
       } catch {
-        setLessons([]);
+        browserLessons = [];
       }
+
+      let projectLessons = bundledLessons;
+      if (canUseProjectStore()) {
+        try {
+          const response = await fetch(PROJECT_STORE_URL, { cache: 'no-store' });
+          if (!response.ok) throw new Error('Project store unavailable');
+          projectLessons = mergeLessonLibraries(projectLessons, sanitizeShadowingLessons(await response.json()));
+        } catch {
+          if (!cancelled) setProjectSyncState('browser-only');
+        }
+      } else {
+        setProjectSyncState('browser-only');
+      }
+
+      if (cancelled) return;
+      setLessons(mergeLessonLibraries(projectLessons, browserLessons));
       setHydrated(true);
-    });
-    return () => cancelAnimationFrame(frame);
-  }, []);
+    };
+    void hydrateLibrary();
+    return () => { cancelled = true; };
+  }, [bundledLessons]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -60,6 +100,29 @@ export function ShadowingHub({ onBack }: Props) {
     } catch (error) {
       console.error('Không thể lưu thêm bài Shadowing vào bộ nhớ trình duyệt.', error);
     }
+
+    if (!canUseProjectStore()) {
+      queueMicrotask(() => setProjectSyncState('browser-only'));
+      return;
+    }
+
+    const snapshot = JSON.stringify(lessons);
+    queueMicrotask(() => setProjectSyncState('syncing'));
+    projectSyncQueueRef.current = projectSyncQueueRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const response = await fetch(PROJECT_STORE_URL, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: snapshot,
+        });
+        if (!response.ok) throw new Error('Không ghi được dữ liệu vào project.');
+        setProjectSyncState('synced');
+      })
+      .catch((error: unknown) => {
+        console.error('Không thể đồng bộ bài Shadowing vào project.', error);
+        setProjectSyncState('browser-only');
+      });
   }, [hydrated, lessons]);
 
   const activeLesson = lessons.find((lesson) => lesson.id === activeLessonId) ?? null;
@@ -160,15 +223,21 @@ export function ShadowingHub({ onBack }: Props) {
             <button onClick={onBack} className="w-10 h-10 shrink-0 rounded-full border border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Về bàn học"><i className="fas fa-chevron-left" /></button>
             <div><h1 className="text-xl font-black">Học qua video</h1><p className="text-xs text-slate-500 dark:text-slate-400">Video Shadowing tiếng Nhật</p></div>
           </div>
-          <nav className="grid grid-cols-3 gap-2" aria-label="Khu vực Video Shadowing" role="tablist">
-            {([
-              ['library', 'fa-book-open', 'Thư viện'],
-              ['discover', 'fa-compass', 'Khám phá'],
-              ['shorts', 'fa-mobile-screen-button', 'Shorts'],
-            ] as const).map(([id, icon, label]) => (
-              <button key={id} type="button" role="tab" aria-selected={hubTab === id} onClick={() => setHubTab(id)} className={`px-3 sm:px-5 py-2.5 rounded-2xl border text-sm font-black transition-colors ${hubTab === id ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-400'}`}><i className={`fas ${icon} mr-2`} />{label}</button>
-            ))}
-          </nav>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <nav className="grid grid-cols-3 gap-2" aria-label="Khu vực Video Shadowing" role="tablist">
+              {([
+                ['library', 'fa-book-open', 'Thư viện'],
+                ['discover', 'fa-compass', 'Khám phá'],
+                ['shorts', 'fa-mobile-screen-button', 'Shorts'],
+              ] as const).map(([id, icon, label]) => (
+                <button key={id} type="button" role="tab" aria-selected={hubTab === id} onClick={() => setHubTab(id)} className={`px-3 sm:px-5 py-2.5 rounded-2xl border text-sm font-black transition-colors ${hubTab === id ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-400'}`}><i className={`fas ${icon} mr-2`} />{label}</button>
+              ))}
+            </nav>
+            <span className={`rounded-full border px-3 py-2 text-xs font-black ${projectSyncState === 'synced' ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : projectSyncState === 'syncing' || projectSyncState === 'checking' ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300' : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'}`} title={projectSyncState === 'browser-only' ? 'Hãy chạy web bằng start-kanji.bat để tự lưu vào project.' : 'Kho bài được đóng gói khi build và deploy.'}>
+              <i className={`fas ${projectSyncState === 'synced' ? 'fa-hard-drive' : projectSyncState === 'syncing' || projectSyncState === 'checking' ? 'fa-circle-notch fa-spin' : 'fa-browser'} mr-1.5`} />
+              {projectSyncState === 'synced' ? 'Đã lưu vào project' : projectSyncState === 'syncing' || projectSyncState === 'checking' ? 'Đang đồng bộ' : 'Chỉ lưu trên trình duyệt'}
+            </span>
+          </div>
         </div>
       </header>
 
