@@ -65,7 +65,7 @@ type Props = {
   lesson: ShadowingLesson;
   localFile?: File;
   onBack: () => void;
-  onEdit: () => void;
+  onEdit?: () => void;
   onLocalFileSelected: (file: File) => void;
 };
 
@@ -367,7 +367,7 @@ export function VideoShadowingPlayer({ lesson, localFile, onBack, onEdit, onLoca
           <div className="text-center min-w-0"><h1 className="font-black truncate max-w-[45vw]">{lesson.title}</h1><p className="text-xs text-slate-400">{lesson.level} · Câu {selectedIndex + 1}/{lesson.segments.length}</p></div>
           <div className="flex gap-2">
             <button onClick={downloadSrt} className="ml-auto w-10 h-10 rounded-full border border-emerald-700 text-emerald-300 hover:bg-emerald-950" aria-label="Tải file SRT"><i className="fas fa-download" /></button>
-            <button onClick={onEdit} className="w-10 h-10 rounded-full border border-slate-700 hover:bg-slate-800" aria-label="Sửa bài Shadowing"><i className="fas fa-pen" /></button>
+            {onEdit && <button onClick={onEdit} className="w-10 h-10 rounded-full border border-slate-700 hover:bg-slate-800" aria-label="Sửa bài Shadowing"><i className="fas fa-pen" /></button>}
           </div>
         </div>
         <div className="h-1 bg-slate-800"><div className="h-full bg-emerald-400 transition-[width] duration-200" style={{ width: `${playbackProgress}%` }} /></div>

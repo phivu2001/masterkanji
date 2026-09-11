@@ -24,6 +24,20 @@ const canUseProjectStore = () => (
   && ['localhost', '127.0.0.1'].includes(window.location.hostname)
   && /^31\d{2}$/u.test(window.location.port)
 );
+
+const fetchProjectStore = async (init?: RequestInit) => {
+  const retryDelays = [0, 250, 750, 1_500];
+  let lastError: unknown;
+  for (const delay of retryDelays) {
+    if (delay > 0) await new Promise((resolve) => window.setTimeout(resolve, delay));
+    try {
+      return await fetch(PROJECT_STORE_URL, { cache: 'no-store', ...init });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+};
 const topicFilters: Array<{ id: ShadowingTopic | 'Toàn bộ'; icon: string; active: string }> = [
   { id: 'Toàn bộ', icon: 'fa-table-cells-large', active: 'bg-slate-800 text-white border-slate-800' },
   { id: 'Mới bắt đầu', icon: 'fa-seedling', active: 'bg-blue-500 text-white border-blue-500' },
@@ -75,7 +89,7 @@ export function ShadowingHub({ onBack }: Props) {
       let projectLessons = bundledLessons;
       if (canUseProjectStore()) {
         try {
-          const response = await fetch(PROJECT_STORE_URL, { cache: 'no-store' });
+          const response = await fetchProjectStore();
           if (!response.ok) throw new Error('Project store unavailable');
           projectLessons = mergeLessonLibraries(projectLessons, sanitizeShadowingLessons(await response.json()));
         } catch {
@@ -111,7 +125,7 @@ export function ShadowingHub({ onBack }: Props) {
     projectSyncQueueRef.current = projectSyncQueueRef.current
       .catch(() => undefined)
       .then(async () => {
-        const response = await fetch(PROJECT_STORE_URL, {
+        const response = await fetchProjectStore({
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: snapshot,
@@ -127,6 +141,7 @@ export function ShadowingHub({ onBack }: Props) {
 
   const activeLesson = lessons.find((lesson) => lesson.id === activeLessonId) ?? null;
   const editingLesson = lessons.find((lesson) => lesson.id === editingLessonId) ?? null;
+  const isLocalAuthoring = hydrated && canUseProjectStore();
   const filteredLessons = useMemo(() => lessons
     .filter((lesson) => levelFilter === 'Tất cả' || lesson.level === levelFilter)
     .filter((lesson) => topicFilter === 'Toàn bộ' || lesson.topic === topicFilter)
@@ -207,12 +222,12 @@ export function ShadowingHub({ onBack }: Props) {
 
   if (!hydrated) return <div className="min-h-screen bg-slate-50 dark:bg-slate-950 flex items-center justify-center text-slate-500"><i className="fas fa-circle-notch fa-spin mr-2" />Đang mở thư viện Shadowing...</div>;
 
-  if (editorOpen) {
+  if (editorOpen && isLocalAuthoring) {
     return <ShadowingLessonEditor lesson={editingLesson} currentLocalFile={editingLesson ? localFiles[editingLesson.id] : undefined} initialYoutubeUrl={editorDraft?.youtubeUrl} initialSourceKind={editorDraft?.sourceKind} initialTopic={editorDraft?.topic} onCancel={() => { setEditorOpen(false); setEditorDraft(null); }} onSave={saveLesson} />;
   }
 
   if (activeLesson) {
-    return <VideoShadowingPlayer lesson={activeLesson} localFile={localFiles[activeLesson.id]} onBack={() => setActiveLessonId(null)} onEdit={() => { setEditorDraft(null); setEditingLessonId(activeLesson.id); setEditorOpen(true); }} onLocalFileSelected={(file) => setLocalFiles((current) => ({ ...current, [activeLesson.id]: file }))} />;
+    return <VideoShadowingPlayer lesson={activeLesson} localFile={localFiles[activeLesson.id]} onBack={() => setActiveLessonId(null)} onEdit={isLocalAuthoring ? () => { setEditorDraft(null); setEditingLessonId(activeLesson.id); setEditorOpen(true); } : undefined} onLocalFileSelected={(file) => setLocalFiles((current) => ({ ...current, [activeLesson.id]: file }))} />;
   }
 
   return (
@@ -233,16 +248,16 @@ export function ShadowingHub({ onBack }: Props) {
                 <button key={id} type="button" role="tab" aria-selected={hubTab === id} onClick={() => setHubTab(id)} className={`px-3 sm:px-5 py-2.5 rounded-2xl border text-sm font-black transition-colors ${hubTab === id ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:border-emerald-400'}`}><i className={`fas ${icon} mr-2`} />{label}</button>
               ))}
             </nav>
-            <span className={`rounded-full border px-3 py-2 text-xs font-black ${projectSyncState === 'synced' ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : projectSyncState === 'syncing' || projectSyncState === 'checking' ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300' : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'}`} title={projectSyncState === 'browser-only' ? 'Hãy chạy web bằng start-kanji.bat để tự lưu vào project.' : 'Kho bài được đóng gói khi build và deploy.'}>
+            {isLocalAuthoring && <span className={`rounded-full border px-3 py-2 text-xs font-black ${projectSyncState === 'synced' ? 'border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' : projectSyncState === 'syncing' || projectSyncState === 'checking' ? 'border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-300' : 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-300'}`} title={projectSyncState === 'browser-only' ? 'Hãy chạy web bằng start-kanji.bat để tự lưu vào project.' : 'Kho bài được đóng gói khi build và deploy.'}>
               <i className={`fas ${projectSyncState === 'synced' ? 'fa-hard-drive' : projectSyncState === 'syncing' || projectSyncState === 'checking' ? 'fa-circle-notch fa-spin' : 'fa-browser'} mr-1.5`} />
               {projectSyncState === 'synced' ? 'Đã lưu vào project' : projectSyncState === 'syncing' || projectSyncState === 'checking' ? 'Đang đồng bộ' : 'Chỉ lưu trên trình duyệt'}
-            </span>
+            </span>}
           </div>
         </div>
       </header>
 
       <main className="max-w-[1600px] mx-auto p-3 sm:p-5">
-        <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-400 p-4 sm:p-5 text-white shadow-sm" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px)', backgroundSize: '22px 22px' }}>
+        {isLocalAuthoring && <section className="relative overflow-hidden rounded-3xl bg-gradient-to-r from-emerald-600 via-emerald-500 to-teal-400 p-4 sm:p-5 text-white shadow-sm" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.07) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.07) 1px, transparent 1px)', backgroundSize: '22px 22px' }}>
           <div className="relative z-10 lg:pr-48">
             <h2 className="text-lg sm:text-xl font-black">Biến mọi video yêu thích thành bài học.</h2>
             <p className="mt-1 text-sm text-emerald-50">Thêm link YouTube hoặc video trên thiết bị, sau đó nhập phụ đề SRT/VTT thủ công trong trình tạo bài.</p>
@@ -273,7 +288,7 @@ export function ShadowingHub({ onBack }: Props) {
           <div className="hidden lg:flex absolute right-8 bottom-3 w-32 h-32 rounded-[2rem] bg-white/20 border border-white/30 rotate-3 items-center justify-center shadow-xl" aria-hidden="true">
             <div className="relative -rotate-3"><div className="text-5xl font-japanese font-black">聴</div><span className="absolute -right-8 -top-5 w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center shadow"><i className="fas fa-play ml-1" /></span><span className="block text-xs font-black text-center mt-1">SHADOWING</span></div>
           </div>
-        </section>
+        </section>}
 
         <section className="mt-3 flex items-center gap-2">
           <div className="min-w-0 flex-1 flex gap-2 overflow-x-auto py-1" aria-label="Lọc theo chủ đề">
@@ -298,14 +313,14 @@ export function ShadowingHub({ onBack }: Props) {
             <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-10 text-center shadow-sm">
               <div className="w-16 h-16 mx-auto rounded-2xl bg-blue-50 dark:bg-blue-950 text-blue-500 flex items-center justify-center text-2xl"><i className="fas fa-compass" /></div>
               <h3 className="font-black text-xl mt-4">Kho khám phá đang chờ nguồn nội dung</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">Khu vực gợi ý nội dung đang được phát triển. Bạn vẫn có thể tự thêm video và phụ đề vào thư viện cá nhân.</p>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-xl mx-auto">{isLocalAuthoring ? 'Khu vực gợi ý nội dung đang được phát triển. Bạn vẫn có thể tự thêm video và phụ đề vào thư viện cá nhân.' : 'Khu vực gợi ý nội dung đang được phát triển.'}</p>
             </div>
           ) : visibleLessons.length === 0 ? (
             <div className="rounded-3xl border-2 border-dashed border-slate-200 dark:border-slate-800 bg-white/70 dark:bg-slate-900/60 p-10 text-center">
               <div className="w-16 h-16 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500 text-2xl flex items-center justify-center mx-auto mb-4"><i className={`fas ${hubTab === 'shorts' ? 'fa-mobile-screen-button' : 'fa-clapperboard'}`} /></div>
               <h3 className="font-black text-lg">{hubTab === 'shorts' ? 'Chưa có bài từ YouTube Shorts' : lessons.length === 0 ? 'Chưa có bài Video Shadowing' : 'Không có bài phù hợp bộ lọc'}</h3>
-              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-lg mx-auto">Dán link YouTube hoặc chọn video trên thiết bị, sau đó nhập phụ đề SRT/VTT thủ công để tạo bài luyện.</p>
-              <button onClick={() => openNewLesson()} className="mt-5 px-5 py-3 rounded-xl bg-emerald-500 text-white font-black"><i className="fas fa-plus mr-2" />Tạo bài mới</button>
+              <p className="text-sm text-slate-500 dark:text-slate-400 mt-2 max-w-lg mx-auto">{isLocalAuthoring ? 'Dán link YouTube hoặc chọn video trên thiết bị, sau đó nhập phụ đề SRT/VTT thủ công để tạo bài luyện.' : 'Kho Shadowing chưa có bài học được phát hành.'}</p>
+              {isLocalAuthoring && <button onClick={() => openNewLesson()} className="mt-5 px-5 py-3 rounded-xl bg-emerald-500 text-white font-black"><i className="fas fa-plus mr-2" />Tạo bài mới</button>}
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
@@ -326,11 +341,11 @@ export function ShadowingHub({ onBack }: Props) {
                         <div className="mt-3 text-xs font-bold text-violet-500"><i className="fas fa-tag mr-1.5" />{lesson.topic}</div>
                       </div>
                     </button>
-                    <div className="px-4 pb-4 flex gap-2">
+                    {isLocalAuthoring && <div className="px-4 pb-4 flex gap-2">
                       <button onClick={() => { setEditorDraft(null); setEditingLessonId(lesson.id); setEditorOpen(true); }} className="flex-1 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-sm font-bold"><i className="fas fa-pen mr-2" />Sửa</button>
                       <button onClick={() => downloadLessonSrt(lesson)} className="px-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600" aria-label={`Tải SRT ${lesson.title}`}><i className="fas fa-download" /></button>
                       <button onClick={() => deleteLesson(lesson)} className="w-10 rounded-xl bg-red-50 dark:bg-red-950/30 text-red-500" aria-label={`Xóa bài ${lesson.title}`}><i className="fas fa-trash" /></button>
-                    </div>
+                    </div>}
                   </article>
                 );
               })}
