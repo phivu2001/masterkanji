@@ -16,6 +16,10 @@ bun dev
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
+## Video Shadowing thủ công
+
+Trong **Video Shadowing**, thêm link YouTube hoặc chọn video trên máy rồi nhập tệp SRT/VTT tiếng Nhật. Bạn có thể nhập thêm SRT/VTT tiếng Việt để ghép bản dịch theo mốc thời gian, sau đó tự chỉnh Romaji và nghĩa của từng câu trước khi lưu bài.
+
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.

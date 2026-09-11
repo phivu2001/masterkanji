@@ -14,7 +14,7 @@ import { useStudyStore } from '@/hooks/useStudyStore';
 import { isDue, type PersonalSet, type ReviewQuality } from '@/lib/study';
 import type { ConjugationDrillConfig } from '@/lib/conjugationDrill';
 
-type AppView = 'home' | 'lessons' | 'study' | 'quiz' | 'vocabulary' | 'vocabularyStudy' | 'vocabularyQuiz' | 'vocabularyTyping' | 'vocabularyCloze' | 'vocabularyGame' | 'conjugationDrill';
+type AppView = 'home' | 'lessons' | 'study' | 'quiz' | 'vocabulary' | 'vocabularyStudy' | 'vocabularyQuiz' | 'vocabularyTyping' | 'vocabularyCloze' | 'vocabularyGame' | 'conjugationDrill' | 'shadowing';
 type StudySource = 'lesson' | 'review' | 'favorites' | 'personal' | 'search' | 'filtered';
 type StudySession = { ids: string[]; label: string; source: StudySource; lessonIndex: number | null };
 type QuizSession = { pool: KanjiInfo[]; mode: 'practice' | 'exam'; questionCount?: number; title?: string };
@@ -39,6 +39,7 @@ const VocabularyStudyScreen = dynamic(() => import('@/components/VocabularyStudy
 const VocabularyTypingScreen = dynamic(() => import('@/components/VocabularyTypingScreen').then((module) => module.VocabularyTypingScreen), { loading: ScreenLoading });
 const BulkConjugationModal = dynamic(() => import('@/components/BulkConjugationModal').then((module) => module.BulkConjugationModal));
 const BulkConjugationScreen = dynamic(() => import('@/components/BulkConjugationScreen').then((module) => module.BulkConjugationScreen), { loading: ScreenLoading });
+const ShadowingHub = dynamic(() => import('@/components/ShadowingHub').then((module) => module.ShadowingHub), { loading: ScreenLoading });
 
 const getRouteLessons = (level: JLPTLevel, n4Only: boolean): RouteLesson[] => getJlptLessons(level, n4Only)
   .map((lesson) => ({
@@ -455,7 +456,7 @@ export default function Home() {
 
   let content;
   if (view === 'home') {
-    content = <HomeDashboard {...dashboardStats} streak={store.streak} todayLearned={store.todayActivity.newLearned} lastPosition={store.lastPosition} settings={store.settings} personalSets={store.personalSets} favoriteCount={store.favorites.length} vocabularyCounts={vocabularyCounts} vocabularyPartOfSpeechCounts={vocabularyPartOfSpeechCounts} quizHistory={store.quizHistory} hardest={hardestKanji} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onSelectLevel={selectLevel} onSelectVocabulary={selectVocabularyLevel} onSelectVocabularyPartOfSpeech={selectVocabularyPartOfSpeech} onContinue={continueLearning} onUpdateSettings={store.updateSettings} onCreateSet={store.createSet} onRenameSet={store.renameSet} onDeleteSet={store.deleteSet} onStartSet={startPersonalSet} onStartFavorites={startFavorites} onExport={exportBackup} onExportCsv={exportCsv} onImport={() => importInputRef.current?.click()} onEnableReminder={enableReminder} />;
+    content = <HomeDashboard {...dashboardStats} streak={store.streak} todayLearned={store.todayActivity.newLearned} lastPosition={store.lastPosition} settings={store.settings} personalSets={store.personalSets} favoriteCount={store.favorites.length} vocabularyCounts={vocabularyCounts} vocabularyPartOfSpeechCounts={vocabularyPartOfSpeechCounts} quizHistory={store.quizHistory} hardest={hardestKanji} isDarkMode={isDarkMode} onToggleDarkMode={() => setIsDarkMode((value) => !value)} onSelectLevel={selectLevel} onSelectVocabulary={selectVocabularyLevel} onSelectVocabularyPartOfSpeech={selectVocabularyPartOfSpeech} onOpenShadowing={() => setView('shadowing')} onContinue={continueLearning} onUpdateSettings={store.updateSettings} onCreateSet={store.createSet} onRenameSet={store.renameSet} onDeleteSet={store.deleteSet} onStartSet={startPersonalSet} onStartFavorites={startFavorites} onExport={exportBackup} onExportCsv={exportCsv} onImport={() => importInputRef.current?.click()} onEnableReminder={enableReminder} />;
   } else if (view === 'lessons') {
     content = <LessonLibrary level={selectedLevel} levelData={routeData} lessonGroups={routeLessons} progress={store.progress} favorites={store.favorites} onBack={() => setView('home')} onSearch={() => setShowSearch(true)} onOpenVocabulary={() => selectVocabularyLevel(selectedLevel)} onStartLesson={openLesson} onStartReview={startReview} onStartQuiz={startQuiz} />;
   } else if (view === 'quiz' && quizSession) {
@@ -464,6 +465,8 @@ export default function Home() {
     content = <VocabularyLibrary level={selectedLevel} words={vocabularyRouteData} lessonGroups={vocabularyLessons} partOfSpeech={selectedVocabularyPartOfSpeech} progress={store.vocabularyProgress} onBack={() => setView('home')} onStartLesson={openVocabularyLesson} onStartReview={startVocabularyReview} onStartQuiz={startVocabularyQuiz} onStartTyping={(pool, title) => startVocabularyActivity(pool, 'typing', title)} onStartCloze={(pool, title) => startVocabularyActivity(pool, 'cloze', title)} onStartGame={(pool, mode, title) => startVocabularyActivity(pool, mode, title)} onStartConjugation={() => setShowConjugationModal(true)} />;
   } else if (view === 'conjugationDrill' && conjugationConfig) {
     content = <BulkConjugationScreen pool={vocabularyData} config={conjugationConfig} settings={store.settings} onExit={() => leaveConjugationDrill('vocabulary')} onHome={() => leaveConjugationDrill('home')} onNewSession={configureNewConjugationSession} onComplete={completeConjugationDrill} />;
+  } else if (view === 'shadowing') {
+    content = <ShadowingHub onBack={() => setView('home')} />;
   } else if (view === 'vocabularyQuiz' && vocabularyQuizSession) {
     content = <VocabularyQuizScreen pool={vocabularyQuizSession.pool} level={selectedLevel} mode={vocabularyQuizSession.mode} requestedQuestionCount={vocabularyQuizSession.questionCount} title={vocabularyQuizSession.title} settings={store.settings} onExit={() => { setVocabularyQuizSession(null); setView('vocabulary'); }} onComplete={completeVocabularyQuiz} />;
   } else if (view === 'vocabularyTyping' && vocabularyActivitySession?.mode === 'typing') {

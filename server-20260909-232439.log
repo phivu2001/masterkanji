@@ -1,0 +1,37 @@
+
+> kanji-web@0.1.0 dev
+> next dev --port 3100
+
+▲ Next.js 16.3.4 (Turbopack)
+- Local:         http://localhost:3100
+- Network:       http://192.168.1.4:3100
+- Environments: .env.local
+✓ Ready in 584ms
+✓ Running next.config.ts took 42ms
+
+ POST /api/shadowing/enrich 502 in 680ms (next.js: 483ms, application-code: 197ms)
+ GET /manifest.webmanifest 200 in 46ms (next.js: 37ms, application-code: 9ms)
+ GET / 200 in 2.6s (next.js: 2.2s, application-code: 364ms)
+ GET /manifest.webmanifest 200 in 13ms (next.js: 6ms, application-code: 6ms)
+ GET / 200 in 162ms (next.js: 4ms, application-code: 159ms)
+ POST /api/shadowing/enrich 400 in 7ms (next.js: 3ms, application-code: 4ms)
+ POST /api/shadowing/enrich 502 in 159ms (next.js: 2ms, application-code: 157ms)
+ POST /api/shadowing/enrich 502 in 161ms (next.js: 2ms, application-code: 159ms)
+ POST /api/shadowing/enrich 502 in 164ms (next.js: 1.9ms, application-code: 162ms)
+ GET / 200 in 47ms (next.js: 5ms, application-code: 43ms)
+ GET /manifest.webmanifest 200 in 9ms (next.js: 5ms, application-code: 5ms)
+ GET / 200 in 36ms (next.js: 3ms, application-code: 33ms)
+ GET /manifest.webmanifest 200 in 5ms (next.js: 2.0ms, application-code: 3ms)
+ POST /api/shadowing/enrich 200 in 5.1s (next.js: 5ms, application-code: 5.0s)
+ GET / 200 in 35ms (next.js: 2ms, application-code: 33ms)
+ POST /api/shadowing/enrich 200 in 8.0s (next.js: 1.6ms, application-code: 8.0s)
+ POST /api/shadowing/transcriptions 503 in 43ms (next.js: 32ms, application-code: 11ms)
+ POST /api/shadowing/enrich 502 in 3.9s (next.js: 2ms, application-code: 3.9s)
+ POST /api/shadowing/enrich 502 in 1389ms (next.js: 2.0ms, application-code: 1387ms)
+ POST /api/shadowing/enrich 200 in 15.0s (next.js: 1.7ms, application-code: 15.0s)
+ POST /api/shadowing/ai-studio 400 in 121ms (next.js: 95ms, application-code: 26ms)
+ POST /api/shadowing/ai-studio 500 in 10ms (next.js: 1.8ms, application-code: 8ms)
+ POST /api/shadowing/ai-studio 409 in 59s (next.js: 1.6ms, application-code: 59s)
+ POST /api/shadowing/ai-studio 400 in 8ms (next.js: 1.6ms, application-code: 6ms)
+ POST /api/shadowing/ai-studio 403 in 5ms (next.js: 1.8ms, application-code: 3ms)
+ GET / 200 in 242ms (next.js: 71ms, application-code: 171ms)

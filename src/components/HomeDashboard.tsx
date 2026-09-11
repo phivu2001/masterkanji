@@ -26,6 +26,7 @@ type Props = {
   onSelectLevel: (level: JLPTLevel) => void;
   onSelectVocabulary: (level: JLPTLevel) => void;
   onSelectVocabularyPartOfSpeech: (level: JLPTLevel, partOfSpeech: LearningVocabularyPartOfSpeech) => void;
+  onOpenShadowing: () => void;
   onContinue: () => void;
   onUpdateSettings: (patch: Partial<StudySettings>) => void;
   onCreateSet: (name: string) => void;
@@ -165,6 +166,19 @@ export function HomeDashboard(props: Props) {
               );
             })}
           </div>
+          <div className="mt-6 mb-3">
+            <h3 className="font-black text-lg">Học qua nội dung</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400">Luyện nghe nói với video thật, phụ đề chia theo câu và bản thu giọng của bạn.</p>
+          </div>
+          <button onClick={props.onOpenShadowing} className="group w-full overflow-hidden text-left rounded-3xl bg-gradient-to-br from-slate-950 via-emerald-950 to-cyan-900 text-white p-5 sm:p-6 shadow-lg">
+            <div className="flex items-center justify-between gap-5">
+              <div className="flex items-center gap-4 min-w-0">
+                <div className="w-14 h-14 shrink-0 rounded-2xl bg-emerald-400/20 text-emerald-300 flex items-center justify-center text-2xl"><i className="fas fa-video" /></div>
+                <div className="min-w-0"><div className="text-xs font-black uppercase tracking-[0.18em] text-emerald-300 mb-1">Nghe · nói · lặp lại</div><h4 className="font-black text-xl">Video Shadowing</h4><p className="text-sm text-slate-300 mt-1">Thêm video YouTube hoặc video trên máy, nhập SRT/VTT tiếng Nhật và bản dịch Việt nếu có, rồi luyện từng đoạn.</p></div>
+              </div>
+              <div className="hidden sm:flex w-11 h-11 shrink-0 rounded-full bg-white/10 items-center justify-center group-hover:bg-emerald-400 group-hover:text-slate-950 transition-colors"><i className="fas fa-arrow-right" /></div>
+            </div>
+          </button>
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
