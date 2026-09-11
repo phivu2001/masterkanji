@@ -79,15 +79,18 @@ export function ShadowingHub({ onBack }: Props) {
     let cancelled = false;
     const hydrateLibrary = async () => {
       let browserLessons: ShadowingLesson[] = [];
-      try {
-        const stored = localStorage.getItem(STORAGE_KEY);
-        browserLessons = stored ? sanitizeShadowingLessons(JSON.parse(stored)) : [];
-      } catch {
-        browserLessons = [];
+      const isLocalProject = canUseProjectStore();
+      if (isLocalProject) {
+        try {
+          const stored = localStorage.getItem(STORAGE_KEY);
+          browserLessons = stored ? sanitizeShadowingLessons(JSON.parse(stored)) : [];
+        } catch {
+          browserLessons = [];
+        }
       }
 
       let projectLessons = bundledLessons;
-      if (canUseProjectStore()) {
+      if (isLocalProject) {
         try {
           const response = await fetchProjectStore();
           if (!response.ok) throw new Error('Project store unavailable');
