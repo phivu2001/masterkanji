@@ -22,6 +22,9 @@ type MatchPair = {
   right: string;
   rightDetail: string;
   kind?: VocabularyRelationKind;
+  leftMeaning?: string;
+  rightMeaning?: string;
+  explanation?: string;
 };
 
 const shuffle = <T,>(items: T[]) => [...items].sort(() => Math.random() - 0.5);
@@ -47,10 +50,13 @@ const buildSpeedPairs = (pool: VocabularyInfo[]): MatchPair[] => {
 const buildRelationPairs = (pool: VocabularyInfo[]): MatchPair[] => shuffle(getVocabularyRelationPairs(pool)).slice(0, 6).map((pair) => ({
   id: pair.id,
   left: pair.left.word,
-  leftDetail: pair.left.meaning,
+  leftDetail: pair.left.reading,
   right: pair.right.word,
-  rightDetail: pair.explanation,
+  rightDetail: pair.right.reading,
   kind: pair.kind,
+  leftMeaning: pair.left.meaning,
+  rightMeaning: pair.right.meaning,
+  explanation: pair.explanation,
 }));
 
 export function VocabularyGameScreen({ pool, level, mode, title, onExit }: Props) {
@@ -65,6 +71,8 @@ export function VocabularyGameScreen({ pool, level, mode, title, onExit }: Props
   const [locked, setLocked] = useState(false);
   const [finished, setFinished] = useState(false);
   const [bestSeconds, setBestSeconds] = useState<number | null>(null);
+  const [feedbackPair, setFeedbackPair] = useState<MatchPair | null>(null);
+  const [finishAfterFeedback, setFinishAfterFeedback] = useState(false);
   const storageKey = `kanjimaster-vocabulary-game-${mode}-${level}`;
 
   useEffect(() => {
@@ -76,10 +84,10 @@ export function VocabularyGameScreen({ pool, level, mode, title, onExit }: Props
   }, [storageKey]);
 
   useEffect(() => {
-    if (finished || pairs.length < 2) return;
+    if (finished || feedbackPair || pairs.length < 2) return;
     const timer = window.setInterval(() => setSeconds((value) => value + 1), 1_000);
     return () => window.clearInterval(timer);
-  }, [finished, pairs.length]);
+  }, [feedbackPair, finished, pairs.length]);
 
   const finishRound = (finalSeconds: number) => {
     setFinished(true);
@@ -97,14 +105,27 @@ export function VocabularyGameScreen({ pool, level, mode, title, onExit }: Props
       if (leftId === rightId) {
         const nextMatched = [...matched, leftId];
         setMatched(nextMatched);
-        if (nextMatched.length === pairs.length) finishRound(seconds);
+        const roundFinished = nextMatched.length === pairs.length;
+        if (mode === 'relations') {
+          setFeedbackPair(pairs.find((pair) => pair.id === leftId) ?? null);
+          setFinishAfterFeedback(roundFinished);
+        } else if (roundFinished) {
+          finishRound(seconds);
+        }
       } else {
         setErrors((value) => value + 1);
       }
       setSelectedLeft(null);
       setSelectedRight(null);
-      setLocked(false);
+      if (leftId !== rightId || mode !== 'relations') setLocked(false);
     }, leftId === rightId ? 250 : 550);
+  };
+
+  const closeFeedback = () => {
+    setFeedbackPair(null);
+    setLocked(false);
+    if (finishAfterFeedback) finishRound(seconds);
+    setFinishAfterFeedback(false);
   };
 
   const chooseLeft = (id: string) => {
@@ -127,6 +148,8 @@ export function VocabularyGameScreen({ pool, level, mode, title, onExit }: Props
     setSeconds(0);
     setLocked(false);
     setFinished(false);
+    setFeedbackPair(null);
+    setFinishAfterFeedback(false);
     setPairs(mode === 'speed' ? buildSpeedPairs(pool) : buildRelationPairs(pool));
   };
 
@@ -166,6 +189,31 @@ export function VocabularyGameScreen({ pool, level, mode, title, onExit }: Props
           </div>
         )}
       </div>
+      {feedbackPair && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm" role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="relation-feedback-title" className="w-full max-w-xl rounded-3xl border border-emerald-200 dark:border-emerald-800 bg-white dark:bg-slate-800 p-5 sm:p-7 shadow-2xl">
+            <div className="text-center">
+              <span className="inline-flex items-center rounded-full bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1 text-xs font-black uppercase tracking-wide text-emerald-700 dark:text-emerald-300"><i className="fas fa-check-circle mr-2" />Ghép chính xác</span>
+              <h2 id="relation-feedback-title" className="mt-3 text-2xl font-black">{feedbackPair.kind === 'antonym' ? 'Cặp từ trái nghĩa' : 'Cặp từ đồng nghĩa'}</h2>
+            </div>
+            <div className="mt-5 grid grid-cols-[1fr_auto_1fr] items-stretch gap-3">
+              <div className="rounded-2xl bg-cyan-50 dark:bg-cyan-950/30 p-4 text-center">
+                <div className="font-japanese text-2xl sm:text-3xl font-black">{feedbackPair.left}</div>
+                {feedbackPair.leftDetail && <div className="mt-1 text-xs text-cyan-700 dark:text-cyan-300">{feedbackPair.leftDetail}</div>}
+                <div className="mt-3 text-sm font-bold text-slate-700 dark:text-slate-200">{feedbackPair.leftMeaning}</div>
+              </div>
+              <div className="flex items-center justify-center text-xl font-black text-emerald-500">{feedbackPair.kind === 'antonym' ? '↔' : '≈'}</div>
+              <div className="rounded-2xl bg-violet-50 dark:bg-violet-950/30 p-4 text-center">
+                <div className="font-japanese text-2xl sm:text-3xl font-black">{feedbackPair.right}</div>
+                {feedbackPair.rightDetail && <div className="mt-1 text-xs text-violet-700 dark:text-violet-300">{feedbackPair.rightDetail}</div>}
+                <div className="mt-3 text-sm font-bold text-slate-700 dark:text-slate-200">{feedbackPair.rightMeaning}</div>
+              </div>
+            </div>
+            {feedbackPair.explanation && <p className="mt-4 rounded-xl bg-slate-100 dark:bg-slate-900 px-4 py-3 text-center text-sm font-bold text-slate-600 dark:text-slate-300"><i className="fas fa-language mr-2 text-emerald-500" />{feedbackPair.explanation}</p>}
+            <button autoFocus onClick={closeFeedback} className="mt-5 w-full rounded-xl bg-emerald-500 py-3 font-black text-white hover:bg-emerald-600">{finishAfterFeedback ? 'Xem kết quả' : 'Tiếp tục'} <i className="fas fa-arrow-right ml-2" /></button>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
