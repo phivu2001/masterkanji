@@ -5,6 +5,7 @@ import { toRomaji } from 'wanakana';
 import type { JLPTLevel } from '@/data/jlptCore';
 import type { VocabularyInfo } from '@/data/vocabulary';
 import { analyzeJapaneseAnswer, commitRomajiInput, convertRomajiInput, normalizeJapaneseAnswer } from '@/lib/japaneseInput';
+import { buildTrack, renderRacingCanvas, type Segment, SEGMENT_LENGTH } from '@/lib/racing/engine';
 
 type Props = {
   pool: VocabularyInfo[];
@@ -95,6 +96,9 @@ function ArcadeCar({ id, color, accent, nitro = false }: { id: string; color: st
 export function VocabularyRacingScreen({ pool, level, title, onExit, onComplete }: Props) {
   const racePool = useMemo(() => [...new Map(pool.map((item) => [item.id, item])).values()], [pool]);
   const inputRef = useRef<HTMLInputElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const trackRef = useRef<Segment[]>([]);
+  const skyOffsetRef = useRef(0);
   const composingRef = useRef(false);
   const feedbackTimerRef = useRef<number | null>(null);
   const typingFeedbackTimerRef = useRef<number | null>(null);
@@ -181,6 +185,10 @@ export function VocabularyRacingScreen({ pool, level, title, onExit, onComplete 
     questionStartedAtRef.current = Date.now();
     inputRef.current?.focus();
 
+    if (trackRef.current.length === 0) {
+      trackRef.current = buildTrack();
+    }
+
     let animationFrameId: number;
     const loop = () => {
       const tick = performance.now();
@@ -197,6 +205,26 @@ export function VocabularyRacingScreen({ pool, level, title, onExit, onComplete 
       setDistance(nextDistance);
       setNitroActive(activeNitro);
       setElapsedSeconds((Date.now() - raceStartedAtRef.current) / 1_000);
+
+      // Canvas Rendering
+      const segments = trackRef.current;
+      const baseSegmentIndex = Math.floor(nextDistance / SEGMENT_LENGTH);
+      const baseSegment = segments[baseSegmentIndex % segments.length];
+      if (baseSegment) {
+        skyOffsetRef.current = skyOffsetRef.current + baseSegment.curve * (nextSpeed / 3.6) * deltaSeconds * 0.2;
+      }
+
+      if (canvasRef.current) {
+        renderRacingCanvas(
+          canvasRef.current.getContext('2d', { alpha: false })!,
+          canvasRef.current.width,
+          canvasRef.current.height,
+          segments,
+          nextDistance,
+          skyOffsetRef.current
+        );
+      }
+
       if (nextDistance >= TARGET_DISTANCE) {
         finishRace();
       } else {
@@ -438,29 +466,7 @@ export function VocabularyRacingScreen({ pool, level, title, onExit, onComplete 
 
       <main className="mx-auto max-w-6xl p-3 sm:p-5">
         <section className={`arcade-stage relative h-[340px] overflow-hidden rounded-[1.75rem] border-2 border-cyan-400/40 bg-slate-900 shadow-2xl shadow-cyan-950/60 sm:h-[430px] ${nitroActive ? 'shadow-cyan-400/50' : ''}`}>
-          {/* Sky Gradient */}
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,#020617_0%,#1e1b4b_35%,#701a75_55%,#f59e0b_75%)]" />
-          {/* Stars */}
-          <div className="absolute inset-0 top-0 h-[60%] opacity-40" style={{ backgroundImage: 'radial-gradient(1px 1px at 20px 30px, #ffffff, rgba(0,0,0,0)), radial-gradient(1.5px 1.5px at 60px 70px, #ffffff, rgba(0,0,0,0)), radial-gradient(1px 1px at 120px 20px, #ffffff, rgba(0,0,0,0)), radial-gradient(2px 2px at 180px 90px, #ffffff, rgba(0,0,0,0))', backgroundSize: '250px 250px' }} />
-          
-          {/* Realistic Sun (Centered) */}
-          <div className="absolute left-1/2 top-[12%] h-28 w-28 -translate-x-1/2 rounded-full bg-gradient-to-b from-yellow-100 via-amber-300 to-orange-600 shadow-[0_0_80px_#f59e0b,0_0_20px_#fef3c7_inset] sm:h-40 sm:w-40" style={{ clipPath: 'polygon(0 0, 100% 0, 100% 100%, 0 100%)' }} />
-          {/* Sun Grid Lines (Retro effect) */}
-          <div className="absolute left-1/2 top-[12%] h-28 w-28 -translate-x-1/2 opacity-70 sm:h-40 sm:w-40" style={{ backgroundImage: 'repeating-linear-gradient(180deg, transparent 0, transparent 8px, rgba(2,6,23,0.5) 8px, rgba(2,6,23,0.5) 12px)' }} />
-
-          {/* Mountains & City Silhouettes */}
-          <div className="parallax-hills absolute inset-x-0 top-[20%] h-[25%] opacity-100 drop-shadow-[0_-5px_15px_rgba(245,158,11,.2)]" style={{ backgroundPositionX: `${-distance / 12}px` }} />
-          <div className="parallax-city absolute inset-x-0 top-[26%] h-[24%] opacity-90 drop-shadow-[0_5px_10px_rgba(0,0,0,.5)]" style={{ backgroundPositionX: `${-distance / 18}px` }} />
-
-          <div className="absolute inset-x-0 bottom-0 top-[35%] overflow-hidden" style={{ perspective: '800px' }}>
-            <div className="road-3d-plane absolute inset-x-[-50%] bottom-[-50%] top-[10%]">
-              <div className="road-surface absolute inset-0" style={{ backgroundPositionY: `${distance * 4}px` }} />
-              <div className="lane-marker lane-left absolute bottom-0 top-0" style={{ backgroundPositionY: `${distance * 6}px` }} />
-              <div className="lane-marker lane-right absolute bottom-0 top-0" style={{ backgroundPositionY: `${distance * 6}px` }} />
-              <div className="road-rail road-rail-left absolute bottom-0 top-0" /><div className="road-rail road-rail-right absolute bottom-0 top-0" />
-              {progress >= 80 && <div className="finish-strip absolute inset-x-0 h-9 transition-[top] duration-100" style={{ top: `${finishTrackPosition}%` }} />}
-            </div>
-          </div>
+          <canvas ref={canvasRef} width={800} height={430} className="absolute inset-0 h-full w-full object-cover" />
 
           {(nitroActive || speed >= 220) && <div className="speed-lines pointer-events-none absolute inset-0" />}
 
@@ -468,6 +474,7 @@ export function VocabularyRacingScreen({ pool, level, title, onExit, onComplete 
             const lead = Math.max(-1, Math.min(1, (aiDistances[index] - distance) / 2_500));
             const top = 50 - lead * 28;
             const scale = 0.72 - lead * 0.3;
+            // Need to shift AI cars slightly based on curves. Simplified here.
             return <div key={index} className="absolute z-[4] h-20 w-14 transition-[top,transform] duration-100 sm:h-24 sm:w-16" style={{ left: index === 0 ? '42%' : '58%', top: `${top}%`, transform: `translate(-50%, -50%) scale(${scale})` }}><ArcadeCar id={`ai-${index}`} color={index === 0 ? '#e11d48' : '#f59e0b'} accent={index === 0 ? '#fda4af' : '#fde047'} /><span className="absolute left-1/2 top-full -translate-x-1/2 whitespace-nowrap rounded bg-slate-950/75 px-1.5 py-0.5 text-[8px] font-black">AI {index + 1}</span></div>;
           })}
 
@@ -529,18 +536,6 @@ export function VocabularyRacingScreen({ pool, level, title, onExit, onComplete 
 
       <style jsx>{`
         .arcade-stage::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(115deg, rgba(255,255,255,.12), transparent 24% 76%, rgba(34,211,238,.08)); box-shadow: inset 0 0 70px rgba(2,6,23,.55); }
-        .parallax-hills { background-image: linear-gradient(145deg, transparent 50%, rgba(15,118,110,.78) 51% 73%, transparent 74%), linear-gradient(35deg, transparent 53%, rgba(6,95,70,.72) 54% 76%, transparent 77%); background-size: 300px 100%; }
-        .parallax-city { background-image: repeating-linear-gradient(90deg, transparent 0 7px, rgba(8,47,73,.9) 7px 30px, transparent 30px 36px, rgba(15,23,42,.88) 36px 62px); background-size: 190px 100%; clip-path: polygon(0 55%,7% 42%,12% 66%,18% 22%,24% 64%,31% 37%,37% 70%,43% 30%,50% 58%,56% 17%,63% 62%,69% 35%,76% 68%,82% 25%,89% 55%,94% 40%,100% 62%,100% 100%,0 100%); }
-        .road-3d-plane { transform: rotateX(75deg); transform-origin: top center; transform-style: preserve-3d; }
-        .road-surface { background-image: linear-gradient(90deg, #111827, #334155 48%, #0f172a), repeating-linear-gradient(0deg, transparent 0 44px, rgba(255,255,255,.04) 45px 47px); background-blend-mode: screen; background-size: 100% 100%, 100% 96px; }
-        .lane-marker { width: 4%; background-image: repeating-linear-gradient(0deg, transparent 0 30px, rgba(255,255,255,.92) 30px 54px); background-size: 100% 80px; opacity: .9; }
-        .lane-left { left: 30%; }
-        .lane-right { right: 30%; }
-        .road-rail { width: 4%; background: repeating-linear-gradient(0deg,#f59e0b 0 18px,#dc2626 18px 36px); box-shadow: 0 0 18px #f59e0b; }
-        .road-rail-left { left: 15%; }
-        .road-rail-right { right: 15%; }
-        .finish-strip { background-color: #fff; background-image: linear-gradient(45deg,#020617 25%,transparent 25%,transparent 75%,#020617 75%),linear-gradient(45deg,#020617 25%,transparent 25%,transparent 75%,#020617 75%); background-position: 0 0,12px 12px; background-size: 24px 24px; box-shadow: 0 0 22px rgba(255,255,255,.7); }
-        .speed-lines { background: repeating-conic-gradient(from 0deg at 50% 88%, transparent 0deg 7deg, rgba(255,255,255,.2) 8deg 8.7deg); animation: speed-lines .2s linear infinite; mix-blend-mode: screen; }
         .cockpit-panel::after { content: ''; position: absolute; inset: 0; pointer-events: none; opacity: .12; background-image: linear-gradient(rgba(34,211,238,.35) 1px,transparent 1px),linear-gradient(90deg,rgba(34,211,238,.35) 1px,transparent 1px); background-size: 28px 28px; mask-image: linear-gradient(to bottom,black,transparent 70%); }
         .arcade-progress { box-shadow: inset 0 0 18px rgba(8,145,178,.12); }
         .player-car { transition: transform .22s ease-out, filter .2s ease; }
@@ -551,6 +546,7 @@ export function VocabularyRacingScreen({ pool, level, title, onExit, onComplete 
         .arcade-flame { transform-origin: 60px 150px; animation: nitro-flame .12s ease-in-out infinite alternate; }
         .nitro-ready { animation: nitro-ready 1s ease-in-out infinite alternate; }
         .nitro-shake { animation: nitro-shake .16s linear infinite; }
+        .speed-lines { background: repeating-conic-gradient(from 0deg at 50% 88%, transparent 0deg 7deg, rgba(255,255,255,.2) 8deg 8.7deg); animation: speed-lines .2s linear infinite; mix-blend-mode: screen; }
         @keyframes car-forward { 0% { transform: translateY(0); } 45% { transform: translateY(-28px) scale(1.08); } 100% { transform: translateY(0); } }
         @keyframes car-back { 0% { transform: translateY(0); } 40% { transform: translateY(18px) rotate(-3deg); } 65% { transform: translate(6px,14px) rotate(3deg); } 100% { transform: translateY(0); } }
         @keyframes combo-burst { 0% { opacity: 0; transform: scale(.45) rotate(-4deg); } 30% { opacity: 1; transform: scale(1.2) rotate(2deg); } 100% { opacity: 0; transform: scale(1.45); } }
