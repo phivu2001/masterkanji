@@ -4182,7 +4182,7 @@ const rawMinnaN5Vocabulary = [
     "lesson": 14,
     "word": "降ります",
     "reading": "ふります",
-    "meaning": "rơi [mưa~]"
+    "meaning": "mưa/tuyết rơi"
   },
   {
     "lesson": 14,
@@ -6528,6 +6528,25 @@ const exactContextOverrides = new Map<string, VocabularyContext>([
   }],
 ]);
 
+const exactVerbContextOverrides = new Map<string, VocabularyContext[]>([
+  ['降ります\u0000ふります', [
+    {
+      title: 'Cụm thời tiết',
+      phrase: 'この地方は雨がよく降ります。',
+      reading: 'このちほうはあめがよくふります。',
+      meaning: 'Khu vực này thường có mưa.',
+      hint: '降ります đọc là ふります khi chủ thể là 雨 hoặc 雪.',
+    },
+    {
+      title: 'Dự báo hôm nay',
+      phrase: '今日は雨が降ります。',
+      reading: 'きょうはあめがふります。',
+      meaning: 'Hôm nay trời sẽ mưa.',
+      hint: 'Luôn học kèm chủ thể 雨が hoặc 雪が để phân biệt với 降ります（おります）— xuống xe.',
+    },
+  ]],
+]);
+
 const adjectiveMeaningOverrides = new Map<string, string>([
   ['好き', 'Tôi rất thích điều này.'],
   ['大好き', 'Tôi rất thích điều này.'],
@@ -6630,6 +6649,8 @@ const createVocabularyContexts = (item: RawVocabularyInfo, partOfSpeech: Vocabul
   }
 
   if (partOfSpeech === 'verb') {
+    const exactVerbContexts = exactVerbContextOverrides.get(`${word}\u0000${reading}`);
+    if (exactVerbContexts) return [...contexts, ...exactVerbContexts];
     contexts.push({
       title: 'Cụm hành động',
       phrase: `よく${word}。`,

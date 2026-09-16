@@ -16,7 +16,7 @@ export const verbGroupLabels: Record<VerbGroup, string> = {
 };
 
 const ichidanWords = new Set([
-  '見ます', '起きます', '浴びます', '借ります', 'います', 'できます', '降ります',
+  '見ます', '起きます', '浴びます', '借ります', 'います', 'できます',
   '足ります', '着ます', '似ます', '信じます', '感じます', '過ぎます', '落ちます',
   '閉じます', '存じます',
 ]);
@@ -73,7 +73,7 @@ const inflectPoliteVerb = (value: string, reading: string) => {
 
   const lastReadingStem = readingStem.at(-1) ?? '';
   const isEStem = /[えけげせぜてでねへべめれ]/.test(lastReadingStem);
-  const isIchidan = ichidanWords.has(value) || isEStem;
+  const isIchidan = ichidanWords.has(value) || (value === '降ります' && reading === 'おります') || isEStem;
   if (isIchidan) {
     return { group: 'ichidan' as const, dictionary: `${stem}る`, negative: `${stem}ない`, te: `${stem}て`, readingDictionary: `${readingStem}る`, readingNegative: `${readingStem}ない`, readingTe: `${readingStem}て` };
   }

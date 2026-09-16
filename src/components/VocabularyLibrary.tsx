@@ -7,6 +7,7 @@ import { getVocabularyClozeExercises, getVocabularyRelationPairs } from '@/data/
 import { isDue, type StudyProgress } from '@/lib/study';
 
 type VocabularyFilter = 'all' | 'new' | 'learning' | 'hard' | 'learned' | 'due';
+type MultiPracticeMode = 'quiz' | 'typing' | 'cloze';
 
 type Props = {
   level: JLPTLevel;
@@ -43,6 +44,7 @@ const filters: { id: VocabularyFilter; label: string; icon: string }[] = [
 export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, progress, onBack, onStartLesson, onStartReview, onStartQuiz, onStartTyping, onStartCloze, onStartGame, onStartRace, onStartConjugation }: Props) {
   const [filter, setFilter] = useState<VocabularyFilter>('all');
   const [multiQuizOpen, setMultiQuizOpen] = useState(false);
+  const [multiPracticeMode, setMultiPracticeMode] = useState<MultiPracticeMode>('quiz');
   const [selectedLessonIndexes, setSelectedLessonIndexes] = useState<number[]>([]);
   const [multiQuizCount, setMultiQuizCount] = useState(20);
   const selectedPool = useMemo(() => [...new Map(
@@ -51,6 +53,7 @@ export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, pr
       .map((item) => [item.id, item]),
   ).values()], [lessonGroups, selectedLessonIndexes]);
   const selectedQuestionCount = Math.min(multiQuizCount, Math.max(4, selectedPool.length));
+  const selectedClozeCount = getVocabularyClozeExercises(selectedPool).length;
   const dueIds = words.filter((item) => isDue(progress[item.id])).map((item) => item.id);
   const learnedTotal = words.filter((item) => progress[item.id]?.status === 'learned').length;
   const libraryTitle = partOfSpeech ? `${partOfSpeechLabels[partOfSpeech]} ${level}` : `Từ vựng ${level}`;
@@ -65,10 +68,11 @@ export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, pr
     return record?.status === filter;
   };
 
-  const openMultiQuiz = () => {
+  const openMultiPractice = (mode: MultiPracticeMode) => {
     setFilter('all');
     setSelectedLessonIndexes([]);
     setMultiQuizCount(20);
+    setMultiPracticeMode(mode);
     setMultiQuizOpen(true);
   };
 
@@ -88,6 +92,26 @@ export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, pr
     onStartQuiz(selectedPool, 'practice', Math.min(selectedQuestionCount, selectedPool.length), `Quiz ${selectedLessonIndexes.length} bài • ${libraryTitle}`);
   };
 
+  const startSelectedPractice = () => {
+    if (multiPracticeMode === 'quiz') {
+      startMultiQuiz();
+      return;
+    }
+    if (selectedLessonIndexes.length === 0 || selectedPool.length === 0) return;
+    const scopeTitle = `${selectedLessonIndexes.length} bài • ${libraryTitle}`;
+    if (multiPracticeMode === 'typing') {
+      onStartTyping(selectedPool, `Luyện gõ ${scopeTitle}`);
+      return;
+    }
+    if (selectedClozeCount > 0) onStartCloze(selectedPool, `Cloze Test ${scopeTitle}`);
+  };
+
+  const canStartSelectedPractice = multiPracticeMode === 'quiz'
+    ? selectedLessonIndexes.length >= 2 && selectedPool.length >= 4
+    : multiPracticeMode === 'typing'
+      ? selectedLessonIndexes.length >= 1 && selectedPool.length >= 1
+      : selectedLessonIndexes.length >= 1 && selectedClozeCount >= 1;
+
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-slate-900 text-slate-800 dark:text-slate-100 p-4 sm:p-8 pb-24">
       <div className="max-w-6xl mx-auto">
@@ -98,7 +122,7 @@ export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, pr
           </div>
           <div className="flex flex-wrap gap-2">
             <button disabled={dueIds.length === 0} onClick={() => onStartReview(dueIds)} className="px-4 py-2 bg-orange-500 text-white disabled:opacity-40 rounded-xl font-bold"><i className="fas fa-bell mr-2"></i>Ôn từ đến hạn ({dueIds.length})</button>
-            <button disabled={lessonGroups.length < 2} onClick={multiQuizOpen ? closeMultiQuiz : openMultiQuiz} aria-pressed={multiQuizOpen} className={`px-4 py-2 disabled:opacity-40 rounded-xl font-bold ${multiQuizOpen ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-blue-600 text-white'}`}><i className={`fas ${multiQuizOpen ? 'fa-xmark' : 'fa-layer-group'} mr-2`}></i>{multiQuizOpen ? 'Hủy chọn bài' : 'Quiz nhiều bài'}</button>
+            <button disabled={lessonGroups.length < 1} onClick={multiQuizOpen ? closeMultiQuiz : () => openMultiPractice('quiz')} aria-pressed={multiQuizOpen} className={`px-4 py-2 disabled:opacity-40 rounded-xl font-bold ${multiQuizOpen ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'bg-blue-600 text-white'}`}><i className={`fas ${multiQuizOpen ? 'fa-xmark' : 'fa-layer-group'} mr-2`}></i>{multiQuizOpen ? 'Hủy chọn bài' : 'Luyện nhiều bài'}</button>
             <button disabled={words.length < 4} onClick={() => onStartQuiz(words, 'rapid', 10, `Phản xạ ${libraryTitle}`)} className="px-4 py-2 bg-rose-500 text-white disabled:opacity-40 rounded-xl font-bold"><i className="fas fa-bolt mr-2"></i>Phản xạ 10 giây</button>
             <button disabled={words.length < 4} onClick={() => onStartQuiz(words, 'exam')} className="px-4 py-2 bg-slate-900 dark:bg-white text-white dark:text-slate-900 disabled:opacity-40 rounded-xl font-bold"><i className="fas fa-stopwatch mr-2"></i>Thi thử từ vựng</button>
           </div>
@@ -113,19 +137,24 @@ export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, pr
           <section aria-labelledby="vocabulary-multi-quiz-title" className="bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-800 rounded-2xl p-5 mb-5 shadow-sm">
             <div className="flex flex-col lg:flex-row lg:items-end justify-between gap-4">
               <div>
-                <h2 id="vocabulary-multi-quiz-title" className="text-lg font-black text-blue-900 dark:text-blue-100">Chọn các bài {partOfSpeech ? partOfSpeechLabels[partOfSpeech].toLocaleLowerCase('vi-VN') : 'từ vựng'} muốn làm Quiz</h2>
-                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">{selectedLessonIndexes.length} bài • {selectedPool.length} từ không trùng đã chọn. Chọn ít nhất 2 bài.</p>
+                <h2 id="vocabulary-multi-quiz-title" className="text-lg font-black text-blue-900 dark:text-blue-100">Chọn các bài {partOfSpeech ? partOfSpeechLabels[partOfSpeech].toLocaleLowerCase('vi-VN') : 'từ vựng'} muốn luyện</h2>
+                <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">{selectedLessonIndexes.length} bài • {selectedPool.length} từ không trùng đã chọn{multiPracticeMode === 'cloze' ? ` • ${selectedClozeCount} câu Cloze` : ''}.</p>
+                <div className="mt-3 inline-flex flex-wrap gap-1 rounded-xl border border-blue-200 bg-white p-1 dark:border-blue-800 dark:bg-slate-900">
+                  <button type="button" onClick={() => setMultiPracticeMode('quiz')} className={`rounded-lg px-3 py-2 text-sm font-black ${multiPracticeMode === 'quiz' ? 'bg-blue-600 text-white' : 'text-blue-700 dark:text-blue-300'}`}><i className="fas fa-list-check mr-2" />Quiz</button>
+                  <button type="button" onClick={() => setMultiPracticeMode('typing')} className={`rounded-lg px-3 py-2 text-sm font-black ${multiPracticeMode === 'typing' ? 'bg-blue-600 text-white' : 'text-blue-700 dark:text-blue-300'}`}><i className="fas fa-keyboard mr-2" />Luyện gõ Kana</button>
+                  <button type="button" onClick={() => setMultiPracticeMode('cloze')} className={`rounded-lg px-3 py-2 text-sm font-black ${multiPracticeMode === 'cloze' ? 'bg-amber-500 text-white' : 'text-blue-700 dark:text-blue-300'}`}><i className="fas fa-quote-right mr-2" />Cloze</button>
+                </div>
                 <div className="flex flex-wrap gap-2 mt-3">
                   <button onClick={() => setSelectedLessonIndexes(lessonGroups.map((_, index) => index))} className="px-3 py-2 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 rounded-lg text-sm font-bold">Chọn tất cả</button>
                   <button onClick={() => setSelectedLessonIndexes([])} disabled={selectedLessonIndexes.length === 0} className="px-3 py-2 bg-white dark:bg-slate-800 border border-blue-200 dark:border-blue-700 disabled:opacity-40 rounded-lg text-sm font-bold">Bỏ chọn</button>
                 </div>
               </div>
               <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-                <label className="text-sm font-bold text-blue-900 dark:text-blue-100">
+                {multiPracticeMode === 'quiz' && <label className="text-sm font-bold text-blue-900 dark:text-blue-100">
                   <span className="block mb-1">Số câu hỏi</span>
                   <input aria-label="Số câu Quiz nhiều bài từ vựng" type="number" min={4} max={Math.max(4, selectedPool.length)} disabled={selectedPool.length === 0} value={selectedQuestionCount} onChange={(event) => setMultiQuizCount(Math.min(Math.max(4, Number(event.target.value) || 4), Math.max(4, selectedPool.length)))} className="w-full sm:w-28 px-3 py-2 bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-700 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50" />
-                </label>
-                <button onClick={startMultiQuiz} disabled={selectedLessonIndexes.length < 2 || selectedPool.length < 4} className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-black"><i className="fas fa-play mr-2"></i>Bắt đầu Quiz</button>
+                </label>}
+                <button onClick={startSelectedPractice} disabled={!canStartSelectedPractice} className={`px-5 py-2.5 text-white disabled:opacity-40 disabled:cursor-not-allowed rounded-xl font-black ${multiPracticeMode === 'cloze' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-600 hover:bg-blue-700'}`}><i className="fas fa-play mr-2"></i>{multiPracticeMode === 'quiz' ? 'Bắt đầu Quiz' : multiPracticeMode === 'typing' ? 'Bắt đầu luyện gõ' : 'Bắt đầu Cloze'}</button>
               </div>
             </div>
           </section>
@@ -136,8 +165,8 @@ export function VocabularyLibrary({ level, words, lessonGroups, partOfSpeech, pr
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
             <button disabled={words.length < 4} onClick={() => onStartRace(words, `Đua xe ${libraryTitle}`)} className="text-left rounded-2xl border border-sky-100 dark:border-sky-900/40 bg-gradient-to-br from-sky-50 to-cyan-50 dark:from-sky-900/20 dark:to-cyan-900/10 p-4 hover:border-sky-400 disabled:opacity-40 transition-colors"><span className="w-10 h-10 rounded-xl bg-gradient-to-br from-sky-500 to-blue-600 text-white flex items-center justify-center mb-3"><i className="fas fa-car-side"></i></span><b className="block">Đua xe từ vựng</b><span className="text-xs text-slate-500 dark:text-slate-400">Gõ đúng để tăng tốc và nạp Nitro</span></button>
             <button onClick={onStartConjugation} className="text-left rounded-2xl border border-orange-100 dark:border-orange-900/40 bg-orange-50 dark:bg-orange-900/10 p-4 hover:border-orange-400 transition-colors"><span className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-500 to-red-500 text-white flex items-center justify-center mb-3"><i className="fas fa-fire"></i></span><b className="block">Đấu trường chia thể</b><span className="text-xs text-slate-500 dark:text-slate-400">Luyện tổng hợp động từ N5/N4</span></button>
-            <button onClick={() => onStartTyping(words, `Luyện gõ ${libraryTitle}`)} className="text-left rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/10 p-4 hover:border-blue-400 transition-colors"><span className="w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center mb-3"><i className="fas fa-keyboard"></i></span><b className="block">Luyện gõ Kana</b><span className="text-xs text-slate-500 dark:text-slate-400">Nhìn nghĩa, tự gõ cách đọc</span></button>
-            {clozeCount > 0 && <button onClick={() => onStartCloze(words, `Cloze Test ${libraryTitle}`)} className="text-left rounded-2xl border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-4 hover:border-amber-400 transition-colors"><span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center mb-3"><i className="fas fa-quote-right"></i></span><b className="block">Cloze thực tế</b><span className="text-xs text-slate-500 dark:text-slate-400">{clozeCount} câu khả dụng</span></button>}
+            <button onClick={() => openMultiPractice('typing')} className="text-left rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/10 p-4 hover:border-blue-400 transition-colors"><span className="w-10 h-10 rounded-xl bg-blue-500 text-white flex items-center justify-center mb-3"><i className="fas fa-keyboard"></i></span><b className="block">Luyện gõ Kana</b><span className="text-xs text-slate-500 dark:text-slate-400">Chọn bài rồi luyện đúng các từ đã chọn</span></button>
+            {clozeCount > 0 && <button onClick={() => openMultiPractice('cloze')} className="text-left rounded-2xl border border-amber-100 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-4 hover:border-amber-400 transition-colors"><span className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center mb-3"><i className="fas fa-quote-right"></i></span><b className="block">Cloze thực tế</b><span className="text-xs text-slate-500 dark:text-slate-400">Chọn bài • {clozeCount} câu khả dụng</span></button>}
             <button disabled={words.length < 4} onClick={() => onStartGame(words, 'speed', `Speed Matching ${libraryTitle}`)} className="text-left rounded-2xl border border-cyan-100 dark:border-cyan-900/40 bg-cyan-50 dark:bg-cyan-900/10 p-4 hover:border-cyan-400 disabled:opacity-40 transition-colors"><span className="w-10 h-10 rounded-xl bg-cyan-500 text-white flex items-center justify-center mb-3"><i className="fas fa-bolt"></i></span><b className="block">Nối từ tính giờ</b><span className="text-xs text-slate-500 dark:text-slate-400">Ghép từ với nghĩa thật nhanh</span></button>
             <button disabled={relationCount < 2} onClick={() => onStartGame(words, 'relations', `Cặp từ ${libraryTitle}`)} className="text-left rounded-2xl border border-violet-100 dark:border-violet-900/40 bg-violet-50 dark:bg-violet-900/10 p-4 hover:border-violet-400 disabled:opacity-40 transition-colors"><span className="w-10 h-10 rounded-xl bg-violet-500 text-white flex items-center justify-center mb-3"><i className="fas fa-code-compare"></i></span><b className="block">Đồng/trái nghĩa</b><span className="text-xs text-slate-500 dark:text-slate-400">{relationCount} cặp dùng được</span></button>
           </div>
