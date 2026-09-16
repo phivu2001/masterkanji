@@ -288,13 +288,13 @@ export function VocabularyRacingScreen({ pool, level, title, onExit, onComplete 
     finishedRef.current = true;
     const stats = statsRef.current;
     const finalElapsed = elapsedRef.current;
-    const crossedOrder = finishOrderRef.current.includes('player')
-      ? finishOrderRef.current
+    const crossedOrder: RacerId[] = finishOrderRef.current.includes('player')
+      ? [...finishOrderRef.current]
       : [...finishOrderRef.current, 'player'];
     const unfinished = (['ai-0', 'ai-1', 'ai-2'] as RacerId[])
       .filter((id) => !crossedOrder.includes(id))
       .sort((left, right) => aiDistancesRef.current[Number(right.slice(3))] - aiDistancesRef.current[Number(left.slice(3))]);
-    const finalOrder = [...crossedOrder, ...unfinished];
+    const finalOrder: RacerId[] = [...crossedOrder, ...unfinished];
     finishOrderRef.current = finalOrder;
     const rank = finalOrder.indexOf('player') + 1;
 
